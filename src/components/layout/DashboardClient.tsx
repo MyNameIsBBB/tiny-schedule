@@ -10,7 +10,7 @@ interface TaskItem {
   id: string;
   title: string;
   tags?: string[];
-  status?: string;
+  status: string;
   [key: string]: unknown;
 }
 
