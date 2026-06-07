@@ -11,8 +11,21 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      # If you need to connect to a real database outside of the container, 
-      # provide the DATABASE_URL here or in an .env file.
-      # - DATABASE_URL=mysql://user:pass@host:3306/db
+      - DATABASE_URL=mongodb://mongo:27017/tinyschedule
+    depends_on:
+      - mongo
     env_file:
       - .env
+
+  mongo:
+    image: mongo:6.0
+    container_name: tinyschedule-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+volumes:
+  mongo_data:
+
