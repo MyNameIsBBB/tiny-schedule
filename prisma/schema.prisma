@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String   @unique
+  name      String?
+  image     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks        Task[]
+  schedules    Schedule[]
+  activityLogs ActivityLog[]
+}
+
+model Task {
+  id               String      @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String      @db.ObjectId
+  title            String
+  description      String?
+  deadline         DateTime?
+  status           TaskStatus  @default(TODO)
+  tags             String[]
+  
+  subtasks         Subtask[]
+
+  estimatedMinutes Int?
+
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activityLogs     ActivityLog[]
+}
+
+type Subtask {
+  id        String
+  title     String
+  completed Boolean @default(false)
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  COMPLETED
+}
+
+model Schedule {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  title       String
+  startTime   DateTime
+  endTime     DateTime
+  isRoutine   Boolean  @default(false)
+  routineDays Int[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ActivityLog {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String   @db.ObjectId
+  taskId        String?  @db.ObjectId
+  
+  startTime     DateTime
+  endTime       DateTime?
+  durationMins  Int?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task          Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+}

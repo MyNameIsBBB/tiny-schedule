@@ -1,26 +1,48 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* Paper (Backgrounds) */
+  --color-paper: #FDFBF7;
+  --color-paper-dark: #F7F4EB;
+  
+  /* Wheat (Primary UI) */
+  --color-wheat: #E6DFD3;
+  --color-wheat-dark: #D4C9B5;
+
+  /* Ink (Text) */
+  --color-ink: #4A3E3D;
+  --color-ink-light: #6B5A58;
+
+  /* Highlight */
+  --color-highlight: #E8A365;
+  --color-highlight-alt: #E2C275;
+
+  /* Border Radii */
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+  --radius-4xl: 2rem;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-soft: 0 4px 20px -2px rgba(74, 62, 61, 0.05);
+
+  /* Defaults */
+  --color-background: var(--color-paper);
+  --color-foreground: var(--color-ink);
+  --font-sans: var(--font-geist-sans), "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  
+  button, a, [role="button"] {
+    cursor: pointer;
+  }
 }
