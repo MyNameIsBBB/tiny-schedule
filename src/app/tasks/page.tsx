@@ -2,6 +2,9 @@ import React from 'react';
 import { getTasks } from '@/app/actions';
 import TasksClient from '@/components/tasks/TasksClient';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function TasksPage() {
   const res = await getTasks();
   const tasks = (res.success && res.data) ? res.data : [];

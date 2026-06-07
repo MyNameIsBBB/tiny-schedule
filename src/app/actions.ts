@@ -322,7 +322,7 @@ export async function createNote(formData: FormData) {
     const userId = await getDefaultUserId();
     const title = formData.get("title") as string;
     const content = formData.get("content") as string;
-    const type = formData.get("type") as string || "SPEC"; // 'SPEC' or 'SANDBOX'
+    const type = formData.get("type") as string || "NOTE";
 
     await prisma.note.create({
       data: {

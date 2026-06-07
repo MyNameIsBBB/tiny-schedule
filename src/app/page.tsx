@@ -2,6 +2,9 @@ import React from 'react';
 import { getTasks, getSchedules, getTodayWater, getTodayExpenses, getWeeklyFixedCosts } from './actions';
 import DashboardClient from '@/components/layout/DashboardClient';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function Dashboard() {
   const [tasksRes, schedulesRes, waterRes, expensesRes, fixedCostsRes] = await Promise.all([
     getTasks(),

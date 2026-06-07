@@ -1,32 +1,29 @@
 "use client";
 
 import React, { useState, useTransition } from 'react';
-import { Plus, Trash2, Edit, Cpu, Code, Search, X } from 'lucide-react';
+import { Plus, Trash2, Edit, Search, X, FileText } from 'lucide-react';
 import { createNote, updateNote, deleteNote } from '@/app/actions';
 
 interface NoteItem {
   id: string;
   title: string;
   content: string;
-  type: string; // 'SPEC' or 'SANDBOX'
+  type: string;
   createdAt: Date | string;
   updatedAt: Date | string;
 }
 
 export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[] }) {
   const [notes, setNotes] = useState<NoteItem[]>(initialNotes);
-  const [activeTab, setActiveTab] = useState<'SPEC' | 'SANDBOX'>('SPEC');
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<NoteItem | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // Filter notes based on active tab and search query
+  // Filter notes based on search query
   const filteredNotes = notes.filter(note => {
-    const matchesTab = note.type === activeTab;
-    const matchesSearch = note.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          note.content.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesTab && matchesSearch;
+    return note.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+           note.content.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   const handleDelete = (id: string) => {
@@ -56,7 +53,7 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
           setEditingNote(null);
         }
       } else {
-        formData.append("type", activeTab);
+        formData.append("type", "NOTE");
         const res = await createNote(formData);
         if (res.success) {
           window.location.reload();
@@ -76,9 +73,7 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
   };
 
   const parseInlineMarkdown = (text: string) => {
-    // Bold: **text**
     let t = text.replace(/\*\*(.*?)\*\*/g, '<strong class="font-extrabold text-ink">$1</strong>');
-    // Italic: *text*
     t = t.replace(/\*(.*?)\*/g, '<em class="italic">$1</em>');
     return t;
   };
@@ -86,13 +81,11 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
   const renderMarkdown = (text: string) => {
     if (!text) return "";
     
-    // 1. Escape HTML
     let html = text
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
 
-    // 2. Parse Line by Line
     const lines = html.split('\n');
     let inList = false;
     let inOrderedList = false;
@@ -100,21 +93,16 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
     const parsedLines = lines.map(line => {
       const trimmed = line.trim();
       
-      // Headers
       if (trimmed.startsWith('### ')) {
-        const content = parseInlineMarkdown(trimmed.slice(4));
-        return `<h4 class="text-sm font-black text-ink mt-3 mb-1">${content}</h4>`;
+        return `<h4 class="text-sm font-black text-ink mt-3 mb-1">${parseInlineMarkdown(trimmed.slice(4))}</h4>`;
       }
       if (trimmed.startsWith('## ')) {
-        const content = parseInlineMarkdown(trimmed.slice(3));
-        return `<h3 class="text-base font-black text-ink mt-4 mb-2">${content}</h3>`;
+        return `<h3 class="text-base font-black text-ink mt-4 mb-2">${parseInlineMarkdown(trimmed.slice(3))}</h3>`;
       }
       if (trimmed.startsWith('# ')) {
-        const content = parseInlineMarkdown(trimmed.slice(2));
-        return `<h2 class="text-lg font-black text-ink mt-5 mb-2">${content}</h2>`;
+        return `<h2 class="text-lg font-black text-ink mt-5 mb-2">${parseInlineMarkdown(trimmed.slice(2))}</h2>`;
       }
 
-      // Unordered Lists
       if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
         const content = parseInlineMarkdown(trimmed.slice(2));
         let prefix = '';
@@ -128,7 +116,6 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
         return '</ul>' + (line ? `<p class="mb-1">${parseInlineMarkdown(line)}</p>` : '<div class="h-2"></div>');
       }
 
-      // Ordered Lists
       const olMatch = trimmed.match(/^(\d+)\.\s(.*)/);
       if (olMatch) {
         const content = parseInlineMarkdown(olMatch[2]);
@@ -143,7 +130,6 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
         return '</ol>' + (line ? `<p class="mb-1">${parseInlineMarkdown(line)}</p>` : '<div class="h-2"></div>');
       }
 
-      // Default paragraph
       return line ? `<p class="mb-1">${parseInlineMarkdown(line)}</p>` : '<div class="h-2"></div>';
     });
 
@@ -159,8 +145,8 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-ink">Geeky Notes</h1>
-          <p className="text-ink-light text-sm mt-1">Keep track of computer specs, server configs, and sandbox API tests.</p>
+          <h1 className="text-3xl font-bold text-ink">My Notes</h1>
+          <p className="text-ink-light text-sm mt-1">Keep track of ideas, specs, and random thoughts.</p>
         </div>
         <button 
           onClick={openAddModal}
@@ -170,39 +156,18 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
         </button>
       </div>
 
-      {/* Tabs & Search */}
-      <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 mb-8">
-        {/* Tab Buttons */}
-        <div className="bg-paper-dark p-1 rounded-2xl border border-wheat-dark/25 flex gap-1 self-start">
-          <button 
-            onClick={() => setActiveTab('SPEC')}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm cursor-pointer transition-all duration-200
-              ${activeTab === 'SPEC' ? 'bg-wheat text-ink shadow-soft' : 'text-ink-light hover:text-ink'}`}
-          >
-            <Cpu size={16} /> Spec & Configs
-          </button>
-          <button 
-            onClick={() => setActiveTab('SANDBOX')}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm cursor-pointer transition-all duration-200
-              ${activeTab === 'SANDBOX' ? 'bg-wheat text-ink shadow-soft' : 'text-ink-light hover:text-ink'}`}
-          >
-            <Code size={16} /> API & Sandbox
-          </button>
-        </div>
-
-        {/* Search Input */}
-        <div className="relative flex-1 md:max-w-xs">
-          <span className="absolute inset-y-0 left-4 flex items-center text-ink-light/50">
-            <Search size={18} />
-          </span>
-          <input 
-            type="text" 
-            placeholder="Search notes..." 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl pl-11 pr-4 py-2.5 outline-none text-ink font-medium placeholder:text-ink-light/50 transition-colors"
-          />
-        </div>
+      {/* Search Input */}
+      <div className="relative w-full max-w-md mb-8">
+        <span className="absolute inset-y-0 left-4 flex items-center text-ink-light/50">
+          <Search size={18} />
+        </span>
+        <input 
+          type="text" 
+          placeholder="Search notes..." 
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl pl-11 pr-4 py-3 outline-none text-ink font-medium placeholder:text-ink-light/50 transition-colors"
+        />
       </div>
 
       {/* Notes Grid */}
@@ -217,7 +182,7 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
                 <div className="flex justify-between items-start mb-4">
                   <h3 className="text-xl font-bold text-ink pr-8">{note.title}</h3>
                   <span className="p-1.5 text-ink-light/40 group-hover:text-ink-light shrink-0">
-                    {activeTab === 'SPEC' ? <Cpu size={20} /> : <Code size={20} />}
+                    <FileText size={20} />
                   </span>
                 </div>
                 
@@ -254,11 +219,11 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
       ) : (
         <div className="text-center text-ink-light py-24 bg-paper-dark rounded-[2.5rem] border-2 border-dashed border-wheat-dark/40 flex flex-col items-center justify-center">
           <div className="w-16 h-16 bg-wheat text-ink-light rounded-full flex items-center justify-center mb-4">
-            {activeTab === 'SPEC' ? <Cpu size={32} /> : <Code size={32} />}
+            <FileText size={32} />
           </div>
           <h3 className="text-xl font-bold text-ink mb-2">No notes found</h3>
           <p className="text-ink-light font-medium max-w-sm">
-            {searchQuery ? "No notes matching your search query." : `Start tracking your ${activeTab === 'SPEC' ? 'PC/Server specs' : 'code snippets'}!`}
+            {searchQuery ? "No notes matching your search query." : "Start writing down your ideas!"}
           </p>
         </div>
       )}
@@ -275,7 +240,7 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
             </button>
             
             <h2 className="text-2xl font-bold mb-6 text-ink">
-              {editingNote ? 'Edit Note' : `Add ${activeTab === 'SPEC' ? 'Spec & Config' : 'API Sandbox'} Note`}
+              {editingNote ? 'Edit Note' : 'Add Note'}
             </h2>
             
             <form onSubmit={handleSave} className="flex flex-col gap-4">
@@ -285,7 +250,7 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
                   name="title" 
                   required 
                   defaultValue={editingNote?.title || ""}
-                  placeholder={activeTab === 'SPEC' ? "e.g. Home Lab Server" : "e.g. Next.js Fetch Snippet"}
+                  placeholder="e.g. Project Ideas"
                   className="w-full max-w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl px-4 py-3 outline-none text-ink font-medium placeholder:text-ink-light/50 transition-colors box-border"
                 />
               </div>
@@ -295,12 +260,9 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
                 <textarea 
                   name="content" 
                   required 
-                  rows={activeTab === 'SANDBOX' ? 10 : 8}
+                  rows={8}
                   defaultValue={editingNote?.content || ""}
-                  placeholder={activeTab === 'SPEC' ? 
-                    "# Server Spec\nCPU: AMD Ryzen 5\nRAM: 32GB\n\n- SSD 1TB\n- Ubuntu 22.04" : 
-                    "1. Fetch data\n2. Parse JSON\n\n**Example code:**\n`fetch('/api')`"
-                  }
+                  placeholder={"1. Think of ideas\n2. Write them down\n\n- Quick note\n- **Bold text**"}
                   className="w-full max-w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl px-4 py-3 outline-none text-ink font-medium placeholder:text-ink-light/50 transition-colors box-border"
                 />
               </div>
