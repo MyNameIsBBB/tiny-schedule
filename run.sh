@@ -33,6 +33,6 @@ $DOCKER_CMD up -d --build
 
 echo "=== Starting Tailscale Funnel on Port 3000 ==="
 nohup sudo tailscale funnel 3000 > tailscale_funnel.log 2>&1 &
-echo "Tailscale Funnel is running in background. Logs saved to tailscale_funnel.log https://ubuntu-homelab.taile459d4.ts.net/"
+echo "Tailscale Funnel is running in background. Logs saved to tailscale_funnel.log https://tinyschedule.taile459d4.ts.net/"
 
 echo "=== Done ==="
