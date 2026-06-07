@@ -18,7 +18,7 @@ services:
       - .env
 
   mongo:
-    image: mongo:6.0
+    image: mongo:4.4
     container_name: tinyschedule-mongo
     restart: unless-stopped
     ports:
