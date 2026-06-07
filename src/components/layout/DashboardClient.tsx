@@ -11,6 +11,8 @@ interface TaskItem {
   title: string;
   tags?: string[];
   status: string;
+  deadline: Date | string | null;
+  estimatedMinutes: number | null;
   [key: string]: unknown;
 }
 
@@ -18,11 +20,39 @@ interface ScheduleItem {
   id: string;
   title: string;
   startTime: Date | string;
+  endTime: Date | string;
   [key: string]: unknown;
 }
 
 export default function DashboardClient({ initialTasks, initialSchedules }: { initialTasks: TaskItem[], initialSchedules: ScheduleItem[] }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Filter schedules to show only today's schedules
+  const getTodaySchedules = () => {
+    const today = new Date();
+    const todayStr = today.toLocaleDateString('en-CA'); // YYYY-MM-DD
+    
+    return initialSchedules
+      .filter((schedule) => {
+        const scheduleDateStr = new Date(schedule.startTime).toLocaleDateString('en-CA');
+        return scheduleDateStr === todayStr;
+      })
+      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+  };
+
+  const todaySchedules = getTodaySchedules();
+
+  const calculateDuration = (start: string | Date, end: string | Date) => {
+    const diffMs = new Date(end).getTime() - new Date(start).getTime();
+    const diffMins = Math.round(diffMs / 60000);
+    const hours = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    
+    if (hours > 0) {
+      return `${hours}h${mins > 0 ? ` ${mins}m` : ''}`;
+    }
+    return `${mins}m`;
+  };
 
   return (
     <>
@@ -68,24 +98,26 @@ export default function DashboardClient({ initialTasks, initialSchedules }: { in
 
           {/* Timeline Area */}
           <div className="flex-1 bg-paper-dark rounded-[2.5rem] p-6 lg:p-8 shadow-soft border border-wheat-dark/20 relative">
-            <div className="absolute left-10 top-12 bottom-12 w-1 bg-wheat-dark/40 rounded-full" />
-            
             <div className="flex flex-col gap-6 relative">
-              {initialSchedules && initialSchedules.length > 0 ? (
-                initialSchedules.map((schedule: ScheduleItem) => {
+              {todaySchedules && todaySchedules.length > 0 ? (
+                todaySchedules.map((schedule: ScheduleItem, index: number) => {
                   const startTimeStr = new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  const durationStr = calculateDuration(schedule.startTime, schedule.endTime);
                   return (
                     <TimeBlock 
                       key={schedule.id}
+                      id={schedule.id}
                       time={startTimeStr} 
                       label={schedule.title} 
-                      duration="1h" 
-                      color="bg-wheat text-ink" 
+                      duration={durationStr} 
+                      color="bg-wheat text-ink"
+                      isFirst={index === 0}
+                      isLast={index === todaySchedules.length - 1}
                     />
                   );
                 })
               ) : (
-                <div className="text-center text-ink-light mt-10">No schedules for today.</div>
+                <div className="text-center text-ink-light py-10">No schedules for today.</div>
               )}
             </div>
           </div>
@@ -119,7 +151,8 @@ export default function DashboardClient({ initialTasks, initialSchedules }: { in
                   tags={task.tags || []} 
                   subtasksDone={0} 
                   subtasksTotal={0} 
-                  timeLeft="Today" 
+                  deadline={task.deadline}
+                  estimatedMinutes={task.estimatedMinutes}
                   status={task.status}
                 />
               ))

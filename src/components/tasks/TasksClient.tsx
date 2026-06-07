@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, CheckSquare } from 'lucide-react';
 import AddTaskModal from './AddTaskModal';
 import TaskCard from './TaskCard';
 
@@ -10,6 +10,8 @@ interface TaskItem {
   title: string;
   tags?: string[];
   status: string;
+  deadline: Date | string | null;
+  estimatedMinutes: number | null;
   [key: string]: unknown;
 }
 
@@ -37,15 +39,19 @@ export default function TasksClient({ initialTasks }: { initialTasks: TaskItem[]
                 id={task.id}
                 title={task.title} 
                 tags={task.tags || []} 
-                timeLeft="No deadline" 
+                deadline={task.deadline}
+                estimatedMinutes={task.estimatedMinutes}
                 status={task.status}
               />
             ))
           ) : (
-            <div className="col-span-full text-center text-ink-light py-20 bg-paper-dark rounded-[2.5rem] border-2 border-dashed border-wheat-dark cursor-pointer hover:bg-wheat/20 transition-colors"
+            <div className="col-span-full text-center text-ink-light py-20 bg-paper-dark rounded-[2.5rem] border-2 border-dashed border-wheat-dark cursor-pointer hover:bg-wheat/20 transition-colors flex flex-col items-center justify-center"
                  onClick={() => setIsModalOpen(true)}>
+              <div className="w-16 h-16 bg-wheat text-ink-light rounded-full flex items-center justify-center mb-4">
+                <CheckSquare size={32} />
+              </div>
               <h3 className="text-xl font-bold text-ink mb-2">No tasks found</h3>
-              <p>You haven&apos;t added any tasks yet. Tap here to add one!</p>
+              <p className="text-ink-light font-medium max-w-sm">You haven&apos;t added any tasks yet. Tap here to add your first task!</p>
             </div>
           )}
         </div>

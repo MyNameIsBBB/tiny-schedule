@@ -42,12 +42,20 @@ export async function createTask(formData: FormData) {
     const tagsStr = formData.get("tags") as string;
     const tags = tagsStr ? tagsStr.split(",").map(t => t.trim()) : [];
     
+    const deadlineStr = formData.get("deadline") as string;
+    const deadline = deadlineStr ? new Date(deadlineStr) : null;
+    
+    const estMinsStr = formData.get("estimatedMinutes") as string;
+    const estimatedMinutes = estMinsStr ? parseInt(estMinsStr) : null;
+    
     await prisma.task.create({
       data: {
         userId,
         title,
         tags,
-        status: "TODO"
+        status: "TODO",
+        deadline,
+        estimatedMinutes
       }
     });
 
@@ -77,6 +85,20 @@ export async function toggleTaskStatus(taskId: string, currentStatus: string) {
   }
 }
 
+export async function deleteTask(taskId: string) {
+  try {
+    await prisma.task.delete({
+      where: { id: taskId }
+    });
+    revalidatePath("/");
+    revalidatePath("/tasks");
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to delete task:", error);
+    return { success: false, error: "Failed to delete task" };
+  }
+}
+
 export async function getSchedules() {
   try {
     const userId = await getDefaultUserId();
@@ -96,10 +118,12 @@ export async function createSchedule(formData: FormData) {
     const userId = await getDefaultUserId();
     const title = formData.get("title") as string;
     
-    // Defaulting to today for demo purposes
-    const now = new Date();
-    const startTime = new Date(now.setHours(9, 0, 0, 0));
-    const endTime = new Date(now.setHours(10, 0, 0, 0));
+    const dateStr = formData.get("date") as string;
+    const startTimeStr = formData.get("startTime") as string;
+    const endTimeStr = formData.get("endTime") as string;
+
+    const startTime = new Date(`${dateStr}T${startTimeStr}:00`);
+    const endTime = new Date(`${dateStr}T${endTimeStr}:00`);
 
     await prisma.schedule.create({
       data: {
@@ -116,5 +140,19 @@ export async function createSchedule(formData: FormData) {
   } catch (error) {
     console.error("Failed to create schedule:", error);
     return { success: false, error: "Failed to create schedule" };
+  }
+}
+
+export async function deleteSchedule(scheduleId: string) {
+  try {
+    await prisma.schedule.delete({
+      where: { id: scheduleId }
+    });
+    revalidatePath("/");
+    revalidatePath("/schedule");
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to delete schedule:", error);
+    return { success: false, error: "Failed to delete schedule" };
   }
 }
