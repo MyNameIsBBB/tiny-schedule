@@ -5,7 +5,15 @@ import { Plus } from 'lucide-react';
 import AddTaskModal from './AddTaskModal';
 import TaskCard from './TaskCard';
 
-export default function TasksClient({ initialTasks }: { initialTasks: any[] }) {
+interface TaskItem {
+  id: string;
+  title: string;
+  tags?: string[];
+  status?: string;
+  [key: string]: unknown;
+}
+
+export default function TasksClient({ initialTasks }: { initialTasks: TaskItem[] }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (
@@ -23,7 +31,7 @@ export default function TasksClient({ initialTasks }: { initialTasks: any[] }) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {initialTasks && initialTasks.length > 0 ? (
-            initialTasks.map((task: any) => (
+            initialTasks.map((task: TaskItem) => (
               <TaskCard 
                 key={task.id}
                 id={task.id}
@@ -37,7 +45,7 @@ export default function TasksClient({ initialTasks }: { initialTasks: any[] }) {
             <div className="col-span-full text-center text-ink-light py-20 bg-paper-dark rounded-[2.5rem] border-2 border-dashed border-wheat-dark cursor-pointer hover:bg-wheat/20 transition-colors"
                  onClick={() => setIsModalOpen(true)}>
               <h3 className="text-xl font-bold text-ink mb-2">No tasks found</h3>
-              <p>You haven't added any tasks yet. Tap here to add one!</p>
+              <p>You haven&apos;t added any tasks yet. Tap here to add one!</p>
             </div>
           )}
         </div>

@@ -6,7 +6,22 @@ import TaskCard from '@/components/tasks/TaskCard';
 import TimeBlock from '@/components/schedule/TimeBlock';
 import AddTaskModal from '@/components/tasks/AddTaskModal';
 
-export default function DashboardClient({ initialTasks, initialSchedules }: { initialTasks: any[], initialSchedules: any[] }) {
+interface TaskItem {
+  id: string;
+  title: string;
+  tags?: string[];
+  status?: string;
+  [key: string]: unknown;
+}
+
+interface ScheduleItem {
+  id: string;
+  title: string;
+  startTime: Date | string;
+  [key: string]: unknown;
+}
+
+export default function DashboardClient({ initialTasks, initialSchedules }: { initialTasks: TaskItem[], initialSchedules: ScheduleItem[] }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (
@@ -47,7 +62,7 @@ export default function DashboardClient({ initialTasks, initialSchedules }: { in
           <div className="hidden lg:flex justify-between items-end mb-8">
             <div>
               <p className="text-ink-light font-medium mb-1">Good morning, Best! ☀️</p>
-              <h2 className="text-3xl font-bold">Today's Schedule</h2>
+              <h2 className="text-3xl font-bold">Today&apos;s Schedule</h2>
             </div>
           </div>
 
@@ -57,7 +72,7 @@ export default function DashboardClient({ initialTasks, initialSchedules }: { in
             
             <div className="flex flex-col gap-6 relative">
               {initialSchedules && initialSchedules.length > 0 ? (
-                initialSchedules.map((schedule: any) => {
+                initialSchedules.map((schedule: ScheduleItem) => {
                   const startTimeStr = new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                   return (
                     <TimeBlock 
@@ -79,7 +94,7 @@ export default function DashboardClient({ initialTasks, initialSchedules }: { in
         {/* Task Management Panel (Right side on PC) */}
         <section className="flex-[1.5] flex flex-col">
           <div className="hidden lg:flex justify-between items-center mb-8">
-            <h2 className="text-3xl font-bold">Today's Focus</h2>
+            <h2 className="text-3xl font-bold">Today&apos;s Focus</h2>
             <button 
               onClick={() => setIsModalOpen(true)}
               className="bg-highlight hover:bg-highlight-alt text-paper px-6 py-3 rounded-full flex items-center gap-2 font-bold shadow-soft transition-transform hover:scale-105 active:scale-95 cursor-pointer"
@@ -90,13 +105,13 @@ export default function DashboardClient({ initialTasks, initialSchedules }: { in
 
           {/* Mobile Title */}
           <div className="lg:hidden flex justify-between items-center mb-6 mt-8">
-            <h2 className="text-2xl font-bold">Today's Focus</h2>
+            <h2 className="text-2xl font-bold">Today&apos;s Focus</h2>
             <button className="md:hidden text-ink-light hover:text-ink cursor-pointer"><MoreHorizontal /></button>
           </div>
 
           <div className="flex flex-col gap-5">
             {initialTasks && initialTasks.length > 0 ? (
-              initialTasks.map((task: any) => (
+              initialTasks.map((task: TaskItem) => (
                 <TaskCard 
                   key={task.id}
                   id={task.id}

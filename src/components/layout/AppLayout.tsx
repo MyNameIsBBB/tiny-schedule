@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { Home, Calendar, CheckSquare, Settings } from 'lucide-react';
 
@@ -22,7 +23,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <aside className="hidden md:flex flex-col w-24 lg:w-64 bg-paper-dark p-6 border-r border-wheat-dark/30 shadow-[4px_0_24px_rgba(74,62,61,0.02)] z-10 sticky top-0 h-screen">
         <div className="flex items-center gap-3 mb-12 px-2">
           <div className="w-10 h-10 rounded-full flex items-center justify-center shadow-soft overflow-hidden shrink-0">
-            <img src="/logo.png" alt="TinySchedule Logo" className="w-full h-full object-cover" />
+            <Image src="/logo.png" alt="TinySchedule Logo" width={40} height={40} className="w-full h-full object-cover" />
           </div>
           <h1 className="hidden lg:block text-2xl font-bold tracking-tight text-ink">Tiny<span className="text-highlight">Schedule</span></h1>
         </div>

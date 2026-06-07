@@ -5,7 +5,14 @@ import { Plus } from 'lucide-react';
 import AddScheduleModal from './AddScheduleModal';
 import TimeBlock from './TimeBlock';
 
-export default function ScheduleClient({ initialSchedules }: { initialSchedules: any[] }) {
+interface ScheduleItem {
+  id: string;
+  title: string;
+  startTime: Date | string;
+  [key: string]: unknown;
+}
+
+export default function ScheduleClient({ initialSchedules }: { initialSchedules: ScheduleItem[] }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (
@@ -26,7 +33,7 @@ export default function ScheduleClient({ initialSchedules }: { initialSchedules:
           
           <div className="flex flex-col gap-6 relative pl-2 lg:pl-6">
             {initialSchedules && initialSchedules.length > 0 ? (
-              initialSchedules.map((schedule: any) => {
+              initialSchedules.map((schedule: ScheduleItem) => {
                 const startTimeStr = new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 return (
                   <TimeBlock 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition } from 'react';
+import React, { useTransition } from 'react';
 import { X } from 'lucide-react';
 import { createTask } from '@/app/actions';
 
