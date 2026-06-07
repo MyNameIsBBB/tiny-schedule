@@ -11,7 +11,7 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=mongodb://mongo:27017/tinyschedule
+      - DATABASE_URL=mongodb://mongo:27017/tinyschedule?directConnection=true
     depends_on:
       - mongo
     env_file:
