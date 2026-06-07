@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tinyschedule-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      # If you need to connect to a real database outside of the container, 
+      # provide the DATABASE_URL here or in an .env file.
+      # - DATABASE_URL=mysql://user:pass@host:3306/db
+    env_file:
+      - .env
