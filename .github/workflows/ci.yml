@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Generate Prisma Client
+      run: npx prisma generate
+
+    - name: Run Lint
+      run: npm run lint
+
+    - name: Build Next.js App
+      run: npm run build
+      env:
+        # If your build process requires a database connection string,
+        # you may need to provide a dummy one or use GitHub Secrets.
+        DATABASE_URL: ${{ secrets.DATABASE_URL || 'mysql://dummy:dummy@localhost:3306/dummy' }}
