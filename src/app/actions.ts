@@ -2,6 +2,43 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { signJWT } from "@/lib/jwt";
+import { redirect } from "next/navigation";
+
+export async function loginUser(password: string) {
+  const expectedPassword = process.env.APP_PASSWORD || "admin123";
+  const jwtSecret = process.env.JWT_SECRET || "tinyschedule-super-secret-key";
+
+  if (password === expectedPassword) {
+    const payload = {
+      authenticated: true,
+      exp: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
+    };
+    
+    const token = await signJWT(payload, jwtSecret);
+    
+    const cookieStore = await cookies();
+    cookieStore.set("auth_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24, // 24 hours
+      path: "/"
+    });
+
+    return { success: true };
+  }
+  
+  return { success: false, error: "Incorrect password" };
+}
+
+export async function logoutUser() {
+  const cookieStore = await cookies();
+  cookieStore.delete("auth_token");
+  redirect("/login");
+}
+
 
 // Helper to get or create a default user
 async function getDefaultUserId() {
