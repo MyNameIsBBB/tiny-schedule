@@ -11,7 +11,6 @@ interface TaskItem {
   tags?: string[];
   status: string;
   deadline: Date | string | null;
-  parentTask?: { id: string; title: string } | null;
   subtasks?: { id: string; title: string; completed: boolean }[];
   [key: string]: unknown;
 }
@@ -42,7 +41,6 @@ export default function TasksClient({ initialTasks }: { initialTasks: TaskItem[]
                 tags={task.tags || []} 
                 deadline={task.deadline}
                 status={task.status}
-                parentTask={task.parentTask}
                 subtasks={task.subtasks}
               />
             ))
@@ -59,7 +57,7 @@ export default function TasksClient({ initialTasks }: { initialTasks: TaskItem[]
         </div>
       </div>
 
-      <AddTaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} existingTasks={initialTasks} />
+      <AddTaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
     </>
   );
 }

@@ -1,31 +1,48 @@
 "use client";
 
-import React, { useState, useTransition } from 'react';
+import React, { useState, useTransition, useEffect } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
-import { createTask } from '@/app/actions';
+import { updateTask } from '@/app/actions';
 
-export default function AddTaskModal({ 
+interface SubtaskItem {
+  id: string;
+  title: string;
+  completed: boolean;
+}
+
+interface TaskItem {
+  id: string;
+  title: string;
+  tags?: string[];
+  status: string;
+  deadline: Date | string | null;
+  subtasks?: SubtaskItem[];
+}
+
+export default function EditTaskModal({ 
   isOpen, 
-  onClose
+  onClose,
+  task
 }: { 
   isOpen: boolean; 
   onClose: () => void;
-  existingTasks?: unknown[]; // kept for signature compatibility but unused
+  task: TaskItem;
 }) {
   const [isPending, startTransition] = useTransition();
-  const [subtasks, setSubtasks] = useState<string[]>([]);
+  const [subtasks, setSubtasks] = useState<SubtaskItem[]>(task.subtasks || []);
   const [subtaskInput, setSubtaskInput] = useState("");
+
+  useEffect(() => {
+    setSubtasks(task.subtasks || []);
+  }, [task]);
 
   if (!isOpen) return null;
 
   async function handleSubmit(formData: FormData) {
     startTransition(async () => {
-      // Append subtasks as JSON string
+      formData.append("id", task.id);
       formData.append("subtasksJson", JSON.stringify(subtasks));
-      await createTask(formData);
-      // Reset state
-      setSubtasks([]);
-      setSubtaskInput("");
+      await updateTask(formData);
       onClose();
     });
   }
@@ -33,15 +50,24 @@ export default function AddTaskModal({
   const handleAddSubtask = (e: React.MouseEvent) => {
     e.preventDefault();
     if (subtaskInput.trim()) {
-      setSubtasks([...subtasks, subtaskInput.trim()]);
+      const newSub: SubtaskItem = {
+        id: `new-${Date.now()}-${Math.random()}`,
+        title: subtaskInput.trim(),
+        completed: false
+      };
+      setSubtasks([...subtasks, newSub]);
       setSubtaskInput("");
     }
   };
 
-  const handleRemoveSubtask = (index: number, e: React.MouseEvent) => {
+  const handleRemoveSubtask = (id: string, e: React.MouseEvent) => {
     e.preventDefault();
-    setSubtasks(subtasks.filter((_, i) => i !== index));
+    setSubtasks(subtasks.filter(sub => sub.id !== id));
   };
+
+  const initialDateStr = task.deadline 
+    ? new Date(task.deadline).toLocaleDateString('en-CA') 
+    : "";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/20 backdrop-blur-sm">
@@ -50,7 +76,7 @@ export default function AddTaskModal({
           <X size={24} />
         </button>
         
-        <h2 className="text-2xl font-bold mb-6 text-ink">New Task</h2>
+        <h2 className="text-2xl font-bold mb-6 text-ink">Edit Task</h2>
         
         <form action={handleSubmit} className="flex flex-col gap-4">
           <div className="w-full">
@@ -58,7 +84,7 @@ export default function AddTaskModal({
             <input 
               name="title" 
               required 
-              autoFocus
+              defaultValue={task.title}
               placeholder="e.g. Design UI Mockup"
               className="w-full max-w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl px-4 py-3 outline-none text-ink font-medium placeholder:text-ink-light/50 transition-colors box-border"
             />
@@ -68,6 +94,7 @@ export default function AddTaskModal({
             <label className="block text-sm font-bold text-ink-light mb-1 ml-2">Tags (comma separated)</label>
             <input 
               name="tags" 
+              defaultValue={task.tags?.join(", ") || ""}
               placeholder="e.g. Design, Urgent"
               className="w-full max-w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl px-4 py-3 outline-none text-ink font-medium placeholder:text-ink-light/50 transition-colors box-border"
             />
@@ -78,6 +105,7 @@ export default function AddTaskModal({
             <input 
               type="date"
               name="deadline" 
+              defaultValue={initialDateStr}
               className="w-full max-w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl px-4 py-3 outline-none text-ink font-medium transition-colors box-border"
             />
           </div>
@@ -104,11 +132,11 @@ export default function AddTaskModal({
 
             {subtasks.length > 0 && (
               <ul className="flex flex-col gap-2 max-h-40 overflow-y-auto pr-1 w-full box-border">
-                {subtasks.map((sub, idx) => (
-                  <li key={idx} className="flex items-center justify-between bg-paper-dark/50 border border-wheat rounded-xl px-4 py-2 text-sm font-medium w-full box-border">
-                    <span className="text-ink break-all pr-2">{sub}</span>
+                {subtasks.map((sub) => (
+                  <li key={sub.id} className="flex items-center justify-between bg-paper-dark/50 border border-wheat rounded-xl px-4 py-2 text-sm font-medium w-full box-border">
+                    <span className={`text-ink break-all pr-2 ${sub.completed ? "line-through text-ink-light" : ""}`}>{sub.title}</span>
                     <button 
-                      onClick={(e) => handleRemoveSubtask(idx, e)}
+                      onClick={(e) => handleRemoveSubtask(sub.id, e)}
                       className="text-ink-light hover:text-red-500 transition-colors p-1 shrink-0"
                     >
                       <Trash2 size={16} />
@@ -124,7 +152,7 @@ export default function AddTaskModal({
             disabled={isPending}
             className="mt-6 w-full bg-highlight hover:bg-highlight-alt text-paper font-bold text-lg py-4 rounded-full shadow-soft transition-transform hover:-translate-y-1 active:scale-95 disabled:opacity-50 cursor-pointer box-border"
           >
-            {isPending ? 'Saving...' : 'Add Task'}
+            {isPending ? 'Saving...' : 'Save Changes'}
           </button>
         </form>
       </div>

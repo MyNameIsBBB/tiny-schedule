@@ -59,10 +59,6 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
         formData.append("type", activeTab);
         const res = await createNote(formData);
         if (res.success) {
-          // Just reload or refetch, since we don't return the new id, we can push to list or do a hard refresh.
-          // For immediate client update, let's refresh page or just update client state:
-          // Because we don't have the new ID immediately from createNote in actions.ts, let's trigger window.location.reload()
-          // or we could fetch again. Since it's Next.js server action revalidatePath, reloading is fast, or we can just reload:
           window.location.reload();
         }
       }
@@ -77,6 +73,84 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
   const openEditModal = (note: NoteItem) => {
     setEditingNote(note);
     setIsModalOpen(true);
+  };
+
+  const parseInlineMarkdown = (text: string) => {
+    // Bold: **text**
+    let t = text.replace(/\*\*(.*?)\*\*/g, '<strong class="font-extrabold text-ink">$1</strong>');
+    // Italic: *text*
+    t = t.replace(/\*(.*?)\*/g, '<em class="italic">$1</em>');
+    return t;
+  };
+
+  const renderMarkdown = (text: string) => {
+    if (!text) return "";
+    
+    // 1. Escape HTML
+    let html = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    // 2. Parse Line by Line
+    const lines = html.split('\n');
+    let inList = false;
+    let inOrderedList = false;
+    
+    const parsedLines = lines.map(line => {
+      const trimmed = line.trim();
+      
+      // Headers
+      if (trimmed.startsWith('### ')) {
+        const content = parseInlineMarkdown(trimmed.slice(4));
+        return `<h4 class="text-sm font-black text-ink mt-3 mb-1">${content}</h4>`;
+      }
+      if (trimmed.startsWith('## ')) {
+        const content = parseInlineMarkdown(trimmed.slice(3));
+        return `<h3 class="text-base font-black text-ink mt-4 mb-2">${content}</h3>`;
+      }
+      if (trimmed.startsWith('# ')) {
+        const content = parseInlineMarkdown(trimmed.slice(2));
+        return `<h2 class="text-lg font-black text-ink mt-5 mb-2">${content}</h2>`;
+      }
+
+      // Unordered Lists
+      if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        const content = parseInlineMarkdown(trimmed.slice(2));
+        let prefix = '';
+        if (!inList) {
+          inList = true;
+          prefix = '<ul class="list-disc pl-5 my-2 flex flex-col gap-1 text-ink-light font-medium">';
+        }
+        return prefix + `<li>${content}</li>`;
+      } else if (inList && !trimmed.startsWith('- ') && !trimmed.startsWith('* ')) {
+        inList = false;
+        return '</ul>' + (line ? `<p class="mb-1">${parseInlineMarkdown(line)}</p>` : '<div class="h-2"></div>');
+      }
+
+      // Ordered Lists
+      const olMatch = trimmed.match(/^(\d+)\.\s(.*)/);
+      if (olMatch) {
+        const content = parseInlineMarkdown(olMatch[2]);
+        let prefix = '';
+        if (!inOrderedList) {
+          inOrderedList = true;
+          prefix = '<ol class="list-decimal pl-5 my-2 flex flex-col gap-1 text-ink-light font-medium">';
+        }
+        return prefix + `<li>${content}</li>`;
+      } else if (inOrderedList && !trimmed.match(/^(\d+)\.\s(.*)/)) {
+        inOrderedList = false;
+        return '</ol>' + (line ? `<p class="mb-1">${parseInlineMarkdown(line)}</p>` : '<div class="h-2"></div>');
+      }
+
+      // Default paragraph
+      return line ? `<p class="mb-1">${parseInlineMarkdown(line)}</p>` : '<div class="h-2"></div>';
+    });
+
+    if (inList) parsedLines.push('</ul>');
+    if (inOrderedList) parsedLines.push('</ol>');
+
+    return parsedLines.join('\n');
   };
 
   return (
@@ -147,18 +221,11 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
                   </span>
                 </div>
                 
-                {/* Note Content */}
-                {note.type === 'SANDBOX' ? (
-                  // Sandbox notes: display as code snippet
-                  <pre className="bg-ink/5 text-ink text-xs font-mono p-4 rounded-2xl overflow-x-auto border border-wheat-dark/25 max-h-48 leading-relaxed whitespace-pre-wrap">
-                    <code>{note.content}</code>
-                  </pre>
-                ) : (
-                  // Spec notes: display as parsed spec grid if it has key-value structure, or raw text
-                  <div className="text-ink-light text-sm font-medium leading-relaxed whitespace-pre-wrap">
-                    {note.content}
-                  </div>
-                )}
+                {/* Flexible Markdown note content */}
+                <div 
+                  className="text-ink-light text-sm font-medium leading-relaxed markdown-content"
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content) }}
+                />
               </div>
 
               {/* Footer */}
@@ -199,7 +266,7 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
       {/* Add/Edit Note Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/20 backdrop-blur-sm">
-          <div className="bg-paper w-full max-w-lg rounded-[2.5rem] shadow-lg border-2 border-wheat-dark p-6 relative max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-paper w-full max-w-lg rounded-[2.5rem] shadow-lg border-2 border-wheat-dark p-6 relative max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200 box-border">
             <button 
               onClick={() => setIsModalOpen(false)} 
               className="absolute top-6 right-6 text-ink-light hover:text-ink cursor-pointer p-1 rounded-full hover:bg-paper-dark transition-colors"
@@ -212,36 +279,36 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
             </h2>
             
             <form onSubmit={handleSave} className="flex flex-col gap-4">
-              <div>
+              <div className="w-full">
                 <label className="block text-sm font-bold text-ink-light mb-1 ml-2">Title</label>
                 <input 
                   name="title" 
                   required 
                   defaultValue={editingNote?.title || ""}
                   placeholder={activeTab === 'SPEC' ? "e.g. Home Lab Server" : "e.g. Next.js Fetch Snippet"}
-                  className="w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl px-5 py-3 outline-none text-ink font-medium placeholder:text-ink-light/50 transition-colors"
+                  className="w-full max-w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl px-4 py-3 outline-none text-ink font-medium placeholder:text-ink-light/50 transition-colors box-border"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-bold text-ink-light mb-1 ml-2">Content</label>
+              <div className="w-full">
+                <label className="block text-sm font-bold text-ink-light mb-1 ml-2">Content (Supports markdown lists & bold)</label>
                 <textarea 
                   name="content" 
                   required 
-                  rows={activeTab === 'SANDBOX' ? 10 : 6}
+                  rows={activeTab === 'SANDBOX' ? 10 : 8}
                   defaultValue={editingNote?.content || ""}
                   placeholder={activeTab === 'SPEC' ? 
-                    "CPU: AMD Ryzen 5 3600\nRAM: 32GB DDR4\nOS: Ubuntu Server 22.04\nStorage: 1TB NVMe" : 
-                    "fetch('https://api.example.com/v1/data')\n  .then(res => res.json())\n  .then(data => console.log(data))"
+                    "# Server Spec\nCPU: AMD Ryzen 5\nRAM: 32GB\n\n- SSD 1TB\n- Ubuntu 22.04" : 
+                    "1. Fetch data\n2. Parse JSON\n\n**Example code:**\n`fetch('/api')`"
                   }
-                  className={`w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl px-5 py-3 outline-none text-ink font-medium placeholder:text-ink-light/50 transition-colors ${activeTab === 'SANDBOX' ? 'font-mono text-sm' : ''}`}
+                  className="w-full max-w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl px-4 py-3 outline-none text-ink font-medium placeholder:text-ink-light/50 transition-colors box-border"
                 />
               </div>
 
               <button 
                 type="submit" 
                 disabled={isPending}
-                className="mt-6 bg-highlight hover:bg-highlight-alt text-paper font-bold text-lg py-4 rounded-full shadow-soft transition-transform hover:-translate-y-1 active:scale-95 disabled:opacity-50 cursor-pointer"
+                className="mt-6 w-full bg-highlight hover:bg-highlight-alt text-paper font-bold text-lg py-4 rounded-full shadow-soft transition-transform hover:-translate-y-1 active:scale-95 disabled:opacity-50 cursor-pointer box-border"
               >
                 {isPending ? 'Saving...' : 'Save Note'}
               </button>

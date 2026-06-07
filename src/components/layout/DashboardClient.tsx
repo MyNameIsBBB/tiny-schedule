@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useTransition } from 'react';
 import { 
-  Plus, MoreHorizontal, CheckCircle2, Droplet, Clock, Play, Pause, 
-  RotateCcw, Coffee, Car, AlertCircle, X, Sparkles, TrendingDown, DollarSign, Wallet
+  Plus, CheckCircle2, Droplet, Clock, Play, Pause, Settings,
+  RotateCcw, Coffee, Car, AlertCircle, X, Sparkles, Wallet, Trash2
 } from 'lucide-react';
 import TaskCard from '@/components/tasks/TaskCard';
 import TimeBlock from '@/components/schedule/TimeBlock';
@@ -16,7 +16,6 @@ interface TaskItem {
   tags?: string[];
   status: string;
   deadline: Date | string | null;
-  parentTask?: { id: string; title: string } | null;
   subtasks?: { id: string; title: string; completed: boolean }[];
   [key: string]: unknown;
 }
@@ -28,6 +27,7 @@ interface ScheduleItem {
   endTime: Date | string;
   cost?: number | null;
   isFixedCost?: boolean;
+  isAllDay?: boolean;
   [key: string]: unknown;
 }
 
@@ -37,6 +37,14 @@ interface ExpenseItem {
   category: string;
   title: string;
   date: Date | string;
+}
+
+interface ExpensePreset {
+  id: string;
+  name: string;
+  emoji: string;
+  amount: number;
+  category: string;
 }
 
 export default function DashboardClient({ 
@@ -68,13 +76,16 @@ export default function DashboardClient({
     updateGreeting();
   }, []);
 
-  // Water Tracker State
+  // Hydration Settings & State
   const [waterMl, setWaterMl] = useState(initialWaterMl);
+  const [waterGoal, setWaterGoal] = useState(2000);
+  const [waterLogAmount, setWaterLogAmount] = useState(250);
+  const [showWaterSettings, setShowWaterSettings] = useState(false);
   const [animateCup, setAnimateCup] = useState(false);
-  const waterGoal = 2000;
+
   const waterPercent = Math.min(Math.round((waterMl / waterGoal) * 100), 100);
 
-  const handleAddWater = (amount = 250) => {
+  const handleAddWater = (amount = waterLogAmount) => {
     setAnimateCup(true);
     setTimeout(() => setAnimateCup(false), 800);
     startTransition(async () => {
@@ -120,11 +131,40 @@ export default function DashboardClient({
     setTimerActive(false);
   };
 
-  // Expenses State
+  // Expenses State & Configurable Presets
   const [expenses, setExpenses] = useState<ExpenseItem[]>(initialExpenses);
   const [customExpenseOpen, setCustomExpenseOpen] = useState(false);
   const [customAmount, setCustomAmount] = useState("");
   const [customTitle, setCustomTitle] = useState("");
+
+  const [expensePresets, setExpensePresets] = useState<ExpensePreset[]>([
+    { id: '1', name: 'Coffee', emoji: '☕', amount: 60, category: 'COFFEE' },
+    { id: '2', name: 'Water', emoji: '🥤', amount: 10, category: 'WATER' },
+    { id: '3', name: 'Commute', emoji: '🚗', amount: 50, category: 'TRANSPORT' }
+  ]);
+  const [showExpenseSettings, setShowExpenseSettings] = useState(false);
+  
+  // States for Editing Presets
+  const [editPresets, setEditPresets] = useState<ExpensePreset[]>([]);
+
+  useEffect(() => {
+    // Load local settings
+    const storedGoal = localStorage.getItem('water_goal');
+    if (storedGoal) setWaterGoal(Number(storedGoal));
+    
+    const storedLog = localStorage.getItem('water_log_amount');
+    if (storedLog) setWaterLogAmount(Number(storedLog));
+
+    const storedPresets = localStorage.getItem('expense_presets');
+    if (storedPresets) {
+      try {
+        const parsed = JSON.parse(storedPresets);
+        setExpensePresets(parsed);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, []);
 
   const handleLogExpense = (category: string, amount: number, title: string) => {
     startTransition(async () => {
@@ -146,7 +186,37 @@ export default function DashboardClient({
     }
   };
 
-  // Filter schedules to show only today's schedules
+  const startEditPresets = () => {
+    setEditPresets([...expensePresets]);
+    setShowExpenseSettings(true);
+  };
+
+  const handleSavePresets = () => {
+    setExpensePresets(editPresets);
+    localStorage.setItem('expense_presets', JSON.stringify(editPresets));
+    setShowExpenseSettings(false);
+  };
+
+  const handleAddPresetRow = () => {
+    const newRow: ExpensePreset = {
+      id: `preset-${Date.now()}-${Math.random()}`,
+      name: 'New Item',
+      emoji: '🏷️',
+      amount: 50,
+      category: 'OTHER'
+    };
+    setEditPresets([...editPresets, newRow]);
+  };
+
+  const handleRemovePresetRow = (id: string) => {
+    setEditPresets(editPresets.filter(p => p.id !== id));
+  };
+
+  const handlePresetChange = (id: string, field: keyof ExpensePreset, val: string | number) => {
+    setEditPresets(editPresets.map(p => p.id === id ? { ...p, [field]: val } : p));
+  };
+
+  // Filter schedules to show only today's schedules (All day sorted to the top)
   const getTodaySchedules = () => {
     const today = new Date();
     const todayStr = today.toLocaleDateString('en-CA'); // YYYY-MM-DD
@@ -156,7 +226,11 @@ export default function DashboardClient({
         const scheduleDateStr = new Date(schedule.startTime).toLocaleDateString('en-CA');
         return scheduleDateStr === todayStr;
       })
-      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+      .sort((a, b) => {
+        if (a.isAllDay && !b.isAllDay) return -1;
+        if (!a.isAllDay && b.isAllDay) return 1;
+        return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
+      });
   };
 
   const todaySchedules = getTodaySchedules();
@@ -183,6 +257,20 @@ export default function DashboardClient({
   // Calculate total upcoming weekly fixed cost
   const totalWeeklyFixedCosts = weeklyFixedCosts.reduce((sum, item) => sum + (item.cost || 0), 0);
 
+  // Focus tasks sorting (nearest deadline first, then tasks without deadlines)
+  const getSortedFocusTasks = () => {
+    return [...initialTasks]
+      .filter(task => task.status !== 'COMPLETED')
+      .sort((a, b) => {
+        if (!a.deadline && !b.deadline) return 0;
+        if (!a.deadline) return 1;
+        if (!b.deadline) return -1;
+        return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+      });
+  };
+
+  const focusTasks = getSortedFocusTasks();
+
   return (
     <>
       {/* Mobile Header */}
@@ -202,7 +290,7 @@ export default function DashboardClient({
       {/* Content Wrapper */}
       <div className={`flex-1 p-6 lg:p-10 flex flex-col gap-10 max-w-[1600px] mx-auto w-full transition-opacity ${isPending ? 'opacity-85' : ''}`}>
         
-        {/* PC/Tablet Header (Only visible on larger screens) */}
+        {/* PC/Tablet Header */}
         <div className="hidden md:flex justify-between items-center w-full">
            <div>
              <p className="text-ink-light font-medium text-lg">{greeting.text.split(',')[0]},</p>
@@ -229,14 +317,19 @@ export default function DashboardClient({
               <div className="flex flex-col gap-6 relative">
                 {todaySchedules && todaySchedules.length > 0 ? (
                   todaySchedules.map((schedule: ScheduleItem, index: number) => {
-                    const startTimeStr = new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    const durationStr = calculateDuration(schedule.startTime, schedule.endTime);
+                    const isAllDay = !!schedule.isAllDay;
+                    const startTimeStr = isAllDay 
+                      ? "All Day" 
+                      : new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const durationStr = isAllDay 
+                      ? "Full Day" 
+                      : calculateDuration(schedule.startTime, schedule.endTime);
                     return (
                       <TimeBlock 
                         key={schedule.id}
                         id={schedule.id}
                         time={startTimeStr} 
-                        label={schedule.title} 
+                        label={schedule.cost ? `${schedule.title} (💸 ${schedule.cost}฿)` : schedule.title} 
                         duration={durationStr} 
                         color={schedule.isFixedCost ? "bg-amber-100 border-2 border-amber-300 text-amber-900" : "bg-wheat text-ink"}
                         isFirst={index === 0}
@@ -254,12 +347,12 @@ export default function DashboardClient({
           {/* Task Management Panel */}
           <section className="flex-[1.5] flex flex-col">
             <h2 className="text-2xl font-bold mb-6 text-ink flex items-center gap-2">
-              🎯 Today&apos;s Focus
+              🎯 Today&apos;s Focus (Nearest First)
             </h2>
 
             <div className="flex flex-col gap-5">
-              {initialTasks && initialTasks.length > 0 ? (
-                initialTasks.map((task: TaskItem) => (
+              {focusTasks && focusTasks.length > 0 ? (
+                focusTasks.map((task: TaskItem) => (
                   <TaskCard 
                     key={task.id}
                     id={task.id}
@@ -267,7 +360,6 @@ export default function DashboardClient({
                     tags={task.tags || []} 
                     deadline={task.deadline}
                     status={task.status}
-                    parentTask={task.parentTask}
                     subtasks={task.subtasks}
                   />
                 ))
@@ -295,8 +387,16 @@ export default function DashboardClient({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
             
             {/* Widget 1: Water Intake */}
-            <div className="bg-paper-dark border-2 border-wheat rounded-[2.5rem] p-6 lg:p-8 shadow-soft flex flex-col justify-between hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start mb-4">
+            <div className="bg-paper-dark border-2 border-wheat rounded-[2.5rem] p-6 lg:p-8 shadow-soft flex flex-col justify-between hover:shadow-md transition-shadow relative">
+              <button 
+                onClick={() => setShowWaterSettings(!showWaterSettings)}
+                className="absolute top-6 right-6 text-ink-light hover:text-ink cursor-pointer p-1 rounded-lg hover:bg-paper transition-colors"
+                title="Water Settings"
+              >
+                <Settings size={18} />
+              </button>
+
+              <div className="flex justify-between items-start mb-4 pr-6">
                 <div className="flex items-center gap-2.5">
                   <div className="w-10 h-10 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center shadow-sm">
                     <Droplet size={20} className={animateCup ? "animate-bounce" : ""} />
@@ -309,28 +409,63 @@ export default function DashboardClient({
                 <span className="text-lg font-extrabold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100 shadow-sm">{waterPercent}%</span>
               </div>
 
-              {/* Cup Visual */}
-              <div className="my-6 flex justify-center">
-                <button 
-                  onClick={() => handleAddWater(250)}
-                  className={`relative w-24 h-28 border-x-4 border-b-4 border-wheat-dark/40 rounded-b-2xl flex items-end justify-center overflow-hidden cursor-pointer group transition-transform active:scale-95`}
-                >
-                  {/* Water inside cup */}
-                  <div 
-                    className="absolute bottom-0 w-full bg-blue-400/80 transition-all duration-700 ease-out"
-                    style={{ height: `${waterPercent}%` }}
-                  />
-                  {/* Text inside cup */}
-                  <span className="relative z-10 font-mono font-bold text-sm text-ink-light group-hover:text-blue-900 transition-colors mb-2">
-                    +250ml
-                  </span>
-                </button>
-              </div>
+              {showWaterSettings ? (
+                <div className="my-4 p-4 bg-paper rounded-2xl border border-wheat-dark/20 flex flex-col gap-3 w-full box-border">
+                  <h4 className="text-sm font-bold text-ink mb-1">Water Settings</h4>
+                  <div className="w-full">
+                    <label className="block text-[11px] font-bold text-ink-light mb-0.5">Daily Goal (ml)</label>
+                    <input 
+                      type="number"
+                      value={waterGoal}
+                      onChange={(e) => {
+                        const val = Number(e.target.value) || 2000;
+                        setWaterGoal(val);
+                        localStorage.setItem('water_goal', String(val));
+                      }}
+                      className="w-full max-w-full px-3 py-1.5 text-xs bg-paper-dark border border-wheat-dark/30 rounded-lg outline-none font-bold"
+                    />
+                  </div>
+                  <div className="w-full">
+                    <label className="block text-[11px] font-bold text-ink-light mb-0.5">Quick Log Glass (ml)</label>
+                    <input 
+                      type="number"
+                      value={waterLogAmount}
+                      onChange={(e) => {
+                        const val = Number(e.target.value) || 250;
+                        setWaterLogAmount(val);
+                        localStorage.setItem('water_log_amount', String(val));
+                      }}
+                      className="w-full max-w-full px-3 py-1.5 text-xs bg-paper-dark border border-wheat-dark/30 rounded-lg outline-none font-bold"
+                    />
+                  </div>
+                  <button 
+                    onClick={() => setShowWaterSettings(false)}
+                    className="mt-1 bg-highlight text-paper text-xs font-bold py-2 rounded-lg"
+                  >
+                    Done
+                  </button>
+                </div>
+              ) : (
+                <div className="my-6 flex justify-center">
+                  <button 
+                    onClick={() => handleAddWater(waterLogAmount)}
+                    className="relative w-24 h-28 border-x-4 border-b-4 border-wheat-dark/40 rounded-b-2xl flex items-end justify-center overflow-hidden cursor-pointer group transition-transform active:scale-95"
+                  >
+                    <div 
+                      className="absolute bottom-0 w-full bg-blue-400/80 transition-all duration-700 ease-out"
+                      style={{ height: `${waterPercent}%` }}
+                    />
+                    <span className="relative z-10 font-mono font-bold text-sm text-ink-light group-hover:text-blue-900 transition-colors mb-2">
+                      +{waterLogAmount}ml
+                    </span>
+                  </button>
+                </div>
+              )}
 
               <div className="flex justify-between items-center">
                 <span className="text-sm font-bold text-ink">{waterMl} ml logged</span>
                 <button 
-                  onClick={() => handleAddWater(250)}
+                  onClick={() => handleAddWater(waterLogAmount)}
                   className="bg-wheat hover:bg-wheat-dark text-ink font-bold text-xs px-4 py-2 rounded-xl transition-colors cursor-pointer"
                 >
                   Quick Log Glass 🥛
@@ -338,7 +473,7 @@ export default function DashboardClient({
               </div>
             </div>
 
-            {/* Widget 2: Pomodoro & Stretch Timer */}
+            {/* Widget 2: Pomodoro Timer */}
             <div className="bg-paper-dark border-2 border-wheat rounded-[2.5rem] p-6 lg:p-8 shadow-soft flex flex-col justify-between hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-2.5">
@@ -347,32 +482,43 @@ export default function DashboardClient({
                   </div>
                   <div>
                     <h3 className="font-bold text-ink">Focus Pomodoro</h3>
-                    <p className="text-xs text-ink-light/75 font-semibold">Stretch Reminder Enabled</p>
+                    <p className="text-xs text-ink-light/75 font-semibold font-semibold">Stretch Break Enabled</p>
                   </div>
                 </div>
               </div>
 
               {/* Timer Visual */}
-              <div className="flex flex-col items-center my-4">
+              <div className="flex flex-col items-center my-4 w-full">
                 <span className="font-mono text-4xl font-extrabold text-ink tracking-widest">{formatTime(timeLeft)}</span>
                 
-                {/* Duration select */}
-                <div className="flex gap-2 mt-4 bg-paper/60 p-1.5 rounded-xl border border-wheat-dark/20">
+                {/* Duration select + custom input */}
+                <div className="flex flex-wrap items-center gap-2 mt-4 bg-paper/60 p-1.5 rounded-xl border border-wheat-dark/20 max-w-full box-border">
                   {[25, 45, 60].map((mins) => (
                     <button 
                       key={mins}
                       onClick={() => handleSetTimerMinutes(mins)}
-                      className={`px-3 py-1 text-xs font-bold rounded-lg cursor-pointer transition-colors
+                      className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer transition-colors
                         ${timerMinutes === mins ? 'bg-wheat text-ink' : 'text-ink-light hover:text-ink'}`}
                     >
                       {mins}m
                     </button>
                   ))}
+                  <div className="flex items-center gap-1 pl-2 border-l border-wheat-dark/30 min-w-0">
+                    <input 
+                      type="number"
+                      min="1"
+                      max="180"
+                      value={timerMinutes}
+                      onChange={(e) => handleSetTimerMinutes(Number(e.target.value) || 25)}
+                      className="w-10 text-center text-xs font-bold bg-transparent border-b border-wheat-dark/60 focus:border-highlight outline-none text-ink min-w-0"
+                    />
+                    <span className="text-[10px] font-bold text-ink-light shrink-0">m</span>
+                  </div>
                 </div>
               </div>
 
               {/* Controls */}
-              <div className="flex gap-3 justify-center">
+              <div className="flex gap-3 justify-center w-full">
                 <button 
                   onClick={handleStartPause}
                   className={`flex-1 font-bold text-sm py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-sm
@@ -383,7 +529,7 @@ export default function DashboardClient({
                 </button>
                 <button 
                   onClick={handleResetTimer}
-                  className="bg-wheat hover:bg-wheat-dark text-ink p-2.5 rounded-xl transition-colors cursor-pointer shadow-sm"
+                  className="bg-wheat hover:bg-wheat-dark text-ink p-2.5 rounded-xl transition-colors cursor-pointer shadow-sm shrink-0"
                   title="Reset"
                 >
                   <RotateCcw size={16} />
@@ -392,71 +538,123 @@ export default function DashboardClient({
             </div>
 
             {/* Widget 3: Quick Expense & Fixed Cost Alerts */}
-            <div className="bg-paper-dark border-2 border-wheat rounded-[2.5rem] p-6 lg:p-8 shadow-soft flex flex-col justify-between hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start mb-4">
+            <div className="bg-paper-dark border-2 border-wheat rounded-[2.5rem] p-6 lg:p-8 shadow-soft flex flex-col justify-between hover:shadow-md transition-shadow relative">
+              <button 
+                onClick={startEditPresets}
+                className="absolute top-6 right-6 text-ink-light hover:text-ink cursor-pointer p-1 rounded-lg hover:bg-paper transition-colors"
+                title="Edit Presets"
+              >
+                <Settings size={18} />
+              </button>
+
+              <div className="flex justify-between items-start mb-4 pr-6">
                 <div className="flex items-center gap-2.5">
                   <div className="w-10 h-10 bg-green-50 text-green-500 rounded-2xl flex items-center justify-center shadow-sm">
                     <Wallet size={20} />
                   </div>
                   <div>
                     <h3 className="font-bold text-ink">Daily Expenses</h3>
-                    <p className="text-xs text-ink-light/75 font-semibold">Quick Tap Tracker</p>
+                    <p className="text-xs text-ink-light/75 font-semibold">Quick Presets</p>
                   </div>
                 </div>
               </div>
 
-              {/* Logging buttons */}
-              <div className="flex flex-col gap-3 my-2">
-                <div className="grid grid-cols-3 gap-2">
-                  <button 
-                    onClick={() => handleLogExpense('COFFEE', 60, 'Coffee ☕')}
-                    className="flex flex-col items-center justify-center bg-paper hover:bg-wheat p-3 rounded-2xl border border-wheat-dark/20 transition-all active:scale-95 cursor-pointer shadow-sm"
-                  >
-                    <Coffee size={18} className="text-amber-700 mb-1" />
-                    <span className="text-[10px] font-bold text-ink-light">Coffee</span>
-                    <span className="text-xs font-extrabold text-ink mt-0.5">60฿</span>
-                  </button>
-                  <button 
-                    onClick={() => handleLogExpense('WATER', 10, 'Vending Water 🥤')}
-                    className="flex flex-col items-center justify-center bg-paper hover:bg-wheat p-3 rounded-2xl border border-wheat-dark/20 transition-all active:scale-95 cursor-pointer shadow-sm"
-                  >
-                    <Droplet size={18} className="text-blue-500 mb-1" />
-                    <span className="text-[10px] font-bold text-ink-light">Water</span>
-                    <span className="text-xs font-extrabold text-ink mt-0.5">10฿</span>
-                  </button>
-                  <button 
-                    onClick={() => handleLogExpense('TRANSPORT', 50, 'Daily Commute 🚗')}
-                    className="flex flex-col items-center justify-center bg-paper hover:bg-wheat p-3 rounded-2xl border border-wheat-dark/20 transition-all active:scale-95 cursor-pointer shadow-sm"
-                  >
-                    <Car size={18} className="text-gray-600 mb-1" />
-                    <span className="text-[10px] font-bold text-ink-light">Commute</span>
-                    <span className="text-xs font-extrabold text-ink mt-0.5">50฿</span>
-                  </button>
-                </div>
-
-                {/* Fixed Cost Alerts Area */}
-                {totalWeeklyFixedCosts > 0 && (
-                  <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl flex items-center gap-2.5">
-                    <AlertCircle size={20} className="text-amber-600 shrink-0" />
-                    <div className="flex-1">
-                      <p className="text-[11px] font-bold text-amber-800">Weekly Fixed Costs (ปลิวก้อนโต)</p>
-                      <p className="text-xs font-extrabold text-amber-950">💸 {totalWeeklyFixedCosts}฿ will fly away this week</p>
+              {/* Preset buttons or settings editor */}
+              {showExpenseSettings ? (
+                <div className="my-2 p-3 bg-paper rounded-2xl border border-wheat-dark/20 flex flex-col gap-2.5 w-full box-border max-h-64 overflow-y-auto">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-xs font-bold text-ink">Edit Presets</h4>
+                    <button onClick={handleAddPresetRow} className="text-[10px] font-bold text-highlight hover:underline">+ Add Preset</button>
+                  </div>
+                  
+                  {editPresets.map((preset) => (
+                    <div key={preset.id} className="flex gap-1 items-center bg-paper-dark p-2 rounded-xl border border-wheat/60 w-full box-border">
+                      <input 
+                        type="text" 
+                        value={preset.emoji}
+                        onChange={(e) => handlePresetChange(preset.id, 'emoji', e.target.value)}
+                        placeholder="☕" 
+                        className="w-7 text-center text-xs bg-paper border border-wheat-dark/30 rounded px-0.5 py-1"
+                      />
+                      <input 
+                        type="text" 
+                        value={preset.name}
+                        onChange={(e) => handlePresetChange(preset.id, 'name', e.target.value)}
+                        placeholder="Name" 
+                        className="flex-1 min-w-0 text-xs bg-paper border border-wheat-dark/30 rounded px-1.5 py-1"
+                      />
+                      <input 
+                        type="number" 
+                        value={preset.amount}
+                        onChange={(e) => handlePresetChange(preset.id, 'amount', Number(e.target.value) || 0)}
+                        placeholder="฿" 
+                        className="w-11 text-xs bg-paper border border-wheat-dark/30 rounded px-1 py-1 text-center font-bold"
+                      />
+                      <select 
+                        value={preset.category}
+                        onChange={(e) => handlePresetChange(preset.id, 'category', e.target.value)}
+                        className="text-[10px] bg-paper border border-wheat-dark/30 rounded py-1"
+                      >
+                        <option value="COFFEE">Coffee</option>
+                        <option value="WATER">Water</option>
+                        <option value="TRANSPORT">Commute</option>
+                        <option value="OTHER">Other</option>
+                      </select>
+                      <button 
+                        onClick={() => handleRemovePresetRow(preset.id)}
+                        className="text-red-500 hover:text-red-700 p-0.5"
+                      >
+                        <Trash2 size={12} />
+                      </button>
                     </div>
+                  ))}
+
+                  <div className="flex gap-2 mt-1">
+                    <button onClick={() => setShowExpenseSettings(false)} className="flex-1 bg-wheat text-ink text-xs font-bold py-2 rounded-lg">Cancel</button>
+                    <button onClick={handleSavePresets} className="flex-1 bg-highlight text-paper text-xs font-bold py-2 rounded-lg">Save</button>
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3 my-2 w-full box-border">
+                  {/* Configurable Presets list */}
+                  <div className="grid grid-cols-3 gap-2 w-full box-border">
+                    {expensePresets.map((preset) => (
+                      <button 
+                        key={preset.id}
+                        onClick={() => handleLogExpense(preset.category, preset.amount, `${preset.name} ${preset.emoji}`)}
+                        className="flex flex-col items-center justify-center bg-paper hover:bg-wheat p-2 rounded-2xl border border-wheat-dark/20 transition-all active:scale-95 cursor-pointer shadow-sm min-w-0 box-border"
+                      >
+                        <span className="text-base mb-0.5">{preset.emoji}</span>
+                        <span className="text-[9px] font-bold text-ink-light truncate w-full text-center">{preset.name}</span>
+                        <span className="text-xs font-extrabold text-ink mt-0.5">{preset.amount}฿</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Fixed Cost Alerts Area */}
+                  {totalWeeklyFixedCosts > 0 && (
+                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl flex items-center gap-2.5 w-full box-border">
+                      <AlertCircle size={20} className="text-amber-600 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-bold text-amber-800">Weekly Fixed Costs (ปลิวก้อนโต)</p>
+                        <p className="text-xs font-extrabold text-amber-950 truncate">💸 {totalWeeklyFixedCosts}฿ will fly away this week</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Custom logs toggler */}
-              <div className="flex gap-2 items-center mt-3 pt-3 border-t border-wheat/60">
+              <div className="flex gap-2 items-center mt-3 pt-3 border-t border-wheat/60 w-full box-border">
                 {customExpenseOpen ? (
-                  <form onSubmit={handleLogCustomExpense} className="flex gap-1.5 w-full">
+                  <form onSubmit={handleLogCustomExpense} className="flex gap-1.5 w-full box-border">
                     <input 
                       type="text" 
                       placeholder="Item"
                       required
                       value={customTitle}
                       onChange={(e) => setCustomTitle(e.target.value)}
-                      className="flex-1 text-xs bg-paper border border-wheat-dark/30 rounded-lg px-2 py-1.5 outline-none font-medium"
+                      className="flex-1 min-w-0 text-xs bg-paper border border-wheat-dark/30 rounded-lg px-2 py-1.5 outline-none font-medium"
                     />
                     <input 
                       type="number" 
@@ -464,10 +662,10 @@ export default function DashboardClient({
                       required
                       value={customAmount}
                       onChange={(e) => setCustomAmount(e.target.value)}
-                      className="w-14 text-xs bg-paper border border-wheat-dark/30 rounded-lg px-2 py-1.5 outline-none font-extrabold"
+                      className="w-12 text-xs bg-paper border border-wheat-dark/30 rounded-lg px-2 py-1.5 outline-none font-extrabold"
                     />
-                    <button type="submit" className="bg-highlight hover:bg-highlight-alt text-paper px-2.5 rounded-lg text-xs font-bold cursor-pointer">Log</button>
-                    <button type="button" onClick={() => setCustomExpenseOpen(false)} className="text-ink-light hover:text-ink p-1"><X size={14} /></button>
+                    <button type="submit" className="bg-highlight hover:bg-highlight-alt text-paper px-2.5 rounded-lg text-xs font-bold cursor-pointer shrink-0">Log</button>
+                    <button type="button" onClick={() => setCustomExpenseOpen(false)} className="text-ink-light hover:text-ink p-1 shrink-0"><X size={14} /></button>
                   </form>
                 ) : (
                   <div className="flex justify-between items-center w-full">
@@ -505,7 +703,7 @@ export default function DashboardClient({
             <button 
               onClick={() => {
                 setShowStretchModal(false);
-                handleAddWater(250); // Automatically log a water glass to encourage health!
+                handleAddWater(waterLogAmount); // Automatically log water glass
               }}
               className="bg-highlight hover:bg-highlight-alt text-paper font-bold text-base px-8 py-3.5 rounded-full shadow-soft transition-transform hover:scale-105 active:scale-95 cursor-pointer"
             >
@@ -516,7 +714,7 @@ export default function DashboardClient({
       )}
 
       {/* Add Task Modal */}
-      <AddTaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} existingTasks={initialTasks} />
+      <AddTaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
     </>
   );
 }

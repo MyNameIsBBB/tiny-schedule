@@ -18,9 +18,11 @@ export default function ScheduleClient({ initialSchedules }: { initialSchedules:
 
   // Group schedules by Date
   const groupSchedulesByDate = () => {
-    const sorted = [...initialSchedules].sort((a, b) => 
-      new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-    );
+    const sorted = [...initialSchedules].sort((a, b) => {
+      if (a.isAllDay && !b.isAllDay) return -1;
+      if (!a.isAllDay && b.isAllDay) return 1;
+      return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
+    });
 
     const groups: { [key: string]: ScheduleItem[] } = {};
     
@@ -84,8 +86,13 @@ export default function ScheduleClient({ initialSchedules }: { initialSchedules:
                   <div className="bg-paper-dark rounded-[2.5rem] p-6 lg:p-8 shadow-soft border border-wheat-dark/20 relative">
                     <div className="flex flex-col gap-6 relative">
                       {items.map((schedule, index) => {
-                        const startTimeStr = new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                        const durationStr = calculateDuration(schedule.startTime, schedule.endTime);
+                        const isAllDay = !!schedule.isAllDay;
+                        const startTimeStr = isAllDay 
+                          ? "All Day" 
+                          : new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        const durationStr = isAllDay 
+                          ? "Full Day" 
+                          : calculateDuration(schedule.startTime, schedule.endTime);
                         const displayTitle = schedule.cost 
                           ? `${schedule.title} (💸 ${schedule.cost}฿)` 
                           : schedule.title;

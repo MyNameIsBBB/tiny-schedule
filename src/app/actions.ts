@@ -122,6 +122,52 @@ export async function createTask(formData: FormData) {
   }
 }
 
+export async function updateTask(formData: FormData) {
+  try {
+    const id = formData.get("id") as string;
+    const title = formData.get("title") as string;
+    const tagsStr = formData.get("tags") as string;
+    const tags = tagsStr ? tagsStr.split(",").map(t => t.trim()) : [];
+    
+    const deadlineStr = formData.get("deadline") as string;
+    const deadline = deadlineStr ? new Date(deadlineStr) : null;
+    
+    const subtasksJson = formData.get("subtasksJson") as string;
+    
+    // Parse subtasks
+    let subtasks: { id: string; title: string; completed: boolean }[] = [];
+    if (subtasksJson) {
+      try {
+        const parsed = JSON.parse(subtasksJson) as { id?: string; title: string; completed?: boolean }[];
+        subtasks = parsed.map((item, idx) => ({
+          id: item.id || `${Date.now()}-${idx}`,
+          title: item.title,
+          completed: item.completed || false
+        }));
+      } catch (e) {
+        console.error("Failed to parse subtasks JSON:", e);
+      }
+    }
+    
+    await prisma.task.update({
+      where: { id },
+      data: {
+        title,
+        tags,
+        deadline,
+        subtasks
+      }
+    });
+
+    revalidatePath("/");
+    revalidatePath("/tasks");
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to update task:", error);
+    return { success: false, error: "Failed to update task" };
+  }
+}
+
 export async function toggleTaskStatus(taskId: string, currentStatus: string) {
   try {
     const newStatus = currentStatus === "COMPLETED" ? "TODO" : "COMPLETED";
@@ -207,8 +253,9 @@ export async function createSchedule(formData: FormData) {
     const title = formData.get("title") as string;
     
     const dateStr = formData.get("date") as string;
-    const startTimeStr = formData.get("startTime") as string;
-    const endTimeStr = formData.get("endTime") as string;
+    const isAllDay = formData.get("isAllDay") === "true" || formData.get("isAllDay") === "on";
+    const startTimeStr = isAllDay ? "00:00" : (formData.get("startTime") as string || "00:00");
+    const endTimeStr = isAllDay ? "23:59" : (formData.get("endTime") as string || "23:59");
 
     const startTime = new Date(`${dateStr}T${startTimeStr}:00`);
     const endTime = new Date(`${dateStr}T${endTimeStr}:00`);
@@ -224,7 +271,8 @@ export async function createSchedule(formData: FormData) {
         startTime,
         endTime,
         cost,
-        isFixedCost
+        isFixedCost,
+        isAllDay
       }
     });
 

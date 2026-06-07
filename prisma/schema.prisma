@@ -65,6 +65,7 @@ model Schedule {
   endTime     DateTime
   isRoutine   Boolean  @default(false)
   routineDays Int[]
+  isAllDay    Boolean  @default(false)
   
   cost        Float?
   isFixedCost Boolean  @default(false)
