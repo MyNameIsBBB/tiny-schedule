@@ -11,7 +11,7 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=mongodb://mongo:27017/tinyschedule?directConnection=true
+      - DATABASE_URL=mongodb://mongo:27017/tinyschedule?replicaSet=rs0&directConnection=true
     depends_on:
       - mongo
     env_file:
@@ -20,6 +20,7 @@ services:
   mongo:
     image: mongo:4.4
     container_name: tinyschedule-mongo
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     restart: unless-stopped
     ports:
       - "27017:27017"
