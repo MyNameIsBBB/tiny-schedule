@@ -25,6 +25,9 @@ $DOCKER_CMD down
 echo "=== Removing stopped docker containers ==="
 $DOCKER_CMD rm -f
 
+echo "=== Pruning old build cache ==="
+docker builder prune -f
+
 echo "=== Building and starting docker containers ==="
 $DOCKER_CMD up -d --build
 
