@@ -20,7 +20,7 @@ export default function AddScheduleModal({ isOpen, onClose }: { isOpen: boolean,
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/20 backdrop-blur-sm">
-      <div className="bg-paper w-full max-w-md rounded-[2.5rem] shadow-lg border-2 border-wheat-dark p-6 relative animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-paper w-full max-w-md rounded-[2.5rem] shadow-lg border-2 border-wheat-dark p-6 relative max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
         <button onClick={onClose} className="absolute top-6 right-6 text-ink-light hover:text-ink cursor-pointer p-1 rounded-full hover:bg-paper-dark transition-colors">
           <X size={24} />
         </button>
@@ -69,6 +69,32 @@ export default function AddScheduleModal({ isOpen, onClose }: { isOpen: boolean,
                 required 
                 defaultValue="10:00"
                 className="w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl px-5 py-3 outline-none text-ink font-medium transition-colors"
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-wheat-dark/20 pt-4 mt-2 flex flex-col gap-4">
+            <div className="flex items-center justify-between px-2">
+              <div>
+                <label className="block text-sm font-bold text-ink">Is Fixed Cost? / Subscription</label>
+                <p className="text-[11px] text-ink-light">Mark this block as a recurring monthly expense (e.g. VPS, Netflix)</p>
+              </div>
+              <input 
+                type="checkbox"
+                name="isFixedCost"
+                value="true"
+                className="w-5 h-5 accent-highlight rounded cursor-pointer"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-bold text-ink-light mb-1 ml-2">Cost (฿)</label>
+              <input 
+                type="number"
+                step="0.01"
+                name="cost" 
+                placeholder="e.g. 150"
+                className="w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl px-5 py-3 outline-none text-ink font-medium placeholder:text-ink-light/50 transition-colors"
               />
             </div>
           </div>

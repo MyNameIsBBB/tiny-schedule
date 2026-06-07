@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { Home, Calendar, CheckSquare, Settings } from 'lucide-react';
+import { Home, Calendar, CheckSquare, Settings, FileText } from 'lucide-react';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -13,6 +13,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { href: '/', icon: <Home />, label: 'Dashboard' },
     { href: '/schedule', icon: <Calendar />, label: 'Schedule' },
     { href: '/tasks', icon: <CheckSquare />, label: 'Tasks' },
+    { href: '/notes', icon: <FileText />, label: 'Notes' },
     { href: '/settings', icon: <Settings />, label: 'Settings' },
   ];
 

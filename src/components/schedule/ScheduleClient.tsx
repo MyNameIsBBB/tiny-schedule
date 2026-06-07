@@ -86,14 +86,18 @@ export default function ScheduleClient({ initialSchedules }: { initialSchedules:
                       {items.map((schedule, index) => {
                         const startTimeStr = new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                         const durationStr = calculateDuration(schedule.startTime, schedule.endTime);
+                        const displayTitle = schedule.cost 
+                          ? `${schedule.title} (💸 ${schedule.cost}฿)` 
+                          : schedule.title;
+                        const isFixed = !!schedule.isFixedCost;
                         return (
                           <TimeBlock 
                             key={schedule.id}
                             id={schedule.id}
                             time={startTimeStr} 
-                            label={schedule.title} 
+                            label={displayTitle} 
                             duration={durationStr} 
-                            color="bg-wheat text-ink"
+                            color={isFixed ? "bg-amber-100 border-2 border-amber-300 text-amber-900" : "bg-wheat text-ink"}
                             isFirst={index === 0}
                             isLast={index === items.length - 1}
                           />

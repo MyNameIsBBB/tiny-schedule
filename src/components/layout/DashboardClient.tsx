@@ -1,10 +1,14 @@
 "use client";
 
-import React, { useState } from 'react';
-import { Plus, MoreHorizontal, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useTransition } from 'react';
+import { 
+  Plus, MoreHorizontal, CheckCircle2, Droplet, Clock, Play, Pause, 
+  RotateCcw, Coffee, Car, AlertCircle, X, Sparkles, TrendingDown, DollarSign, Wallet
+} from 'lucide-react';
 import TaskCard from '@/components/tasks/TaskCard';
 import TimeBlock from '@/components/schedule/TimeBlock';
 import AddTaskModal from '@/components/tasks/AddTaskModal';
+import { logWater, logQuickExpense } from '@/app/actions';
 
 interface TaskItem {
   id: string;
@@ -12,7 +16,8 @@ interface TaskItem {
   tags?: string[];
   status: string;
   deadline: Date | string | null;
-  estimatedMinutes: number | null;
+  parentTask?: { id: string; title: string } | null;
+  subtasks?: { id: string; title: string; completed: boolean }[];
   [key: string]: unknown;
 }
 
@@ -21,11 +26,125 @@ interface ScheduleItem {
   title: string;
   startTime: Date | string;
   endTime: Date | string;
+  cost?: number | null;
+  isFixedCost?: boolean;
   [key: string]: unknown;
 }
 
-export default function DashboardClient({ initialTasks, initialSchedules }: { initialTasks: TaskItem[], initialSchedules: ScheduleItem[] }) {
+interface ExpenseItem {
+  id: string;
+  amount: number;
+  category: string;
+  title: string;
+  date: Date | string;
+}
+
+export default function DashboardClient({ 
+  initialTasks, 
+  initialSchedules,
+  initialWaterMl = 0,
+  initialExpenses = [],
+  weeklyFixedCosts = []
+}: { 
+  initialTasks: TaskItem[]; 
+  initialSchedules: ScheduleItem[];
+  initialWaterMl?: number;
+  initialExpenses?: ExpenseItem[];
+  weeklyFixedCosts?: ScheduleItem[];
+}) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  // Greeting State
+  const [greeting, setGreeting] = useState({ text: "Good morning, Best!", icon: "☀️" });
+  useEffect(() => {
+    const updateGreeting = () => {
+      const hour = new Date().getHours();
+      if (hour >= 5 && hour < 12) setGreeting({ text: "Good morning, Best!", icon: "☀️" });
+      else if (hour >= 12 && hour < 17) setGreeting({ text: "Good afternoon, Best!", icon: "🌤️" });
+      else if (hour >= 17 && hour < 21) setGreeting({ text: "Good evening, Best!", icon: "🌆" });
+      else setGreeting({ text: "Good night, Best!", icon: "🌙" });
+    };
+    updateGreeting();
+  }, []);
+
+  // Water Tracker State
+  const [waterMl, setWaterMl] = useState(initialWaterMl);
+  const [animateCup, setAnimateCup] = useState(false);
+  const waterGoal = 2000;
+  const waterPercent = Math.min(Math.round((waterMl / waterGoal) * 100), 100);
+
+  const handleAddWater = (amount = 250) => {
+    setAnimateCup(true);
+    setTimeout(() => setAnimateCup(false), 800);
+    startTransition(async () => {
+      setWaterMl(prev => prev + amount);
+      await logWater(amount);
+    });
+  };
+
+  // Pomodoro Timer State
+  const [timerMinutes, setTimerMinutes] = useState(25);
+  const [timeLeft, setTimeLeft] = useState(25 * 60);
+  const [timerActive, setTimerActive] = useState(false);
+  const [showStretchModal, setShowStretchModal] = useState(false);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (timerActive && timeLeft > 0) {
+      interval = setInterval(() => {
+        setTimeLeft(prev => prev - 1);
+      }, 1000);
+    } else if (timeLeft === 0 && timerActive) {
+      setTimerActive(false);
+      setShowStretchModal(true);
+      setTimeLeft(timerMinutes * 60);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [timerActive, timeLeft, timerMinutes]);
+
+  const handleStartPause = () => {
+    setTimerActive(!timerActive);
+  };
+
+  const handleResetTimer = () => {
+    setTimerActive(false);
+    setTimeLeft(timerMinutes * 60);
+  };
+
+  const handleSetTimerMinutes = (mins: number) => {
+    setTimerMinutes(mins);
+    setTimeLeft(mins * 60);
+    setTimerActive(false);
+  };
+
+  // Expenses State
+  const [expenses, setExpenses] = useState<ExpenseItem[]>(initialExpenses);
+  const [customExpenseOpen, setCustomExpenseOpen] = useState(false);
+  const [customAmount, setCustomAmount] = useState("");
+  const [customTitle, setCustomTitle] = useState("");
+
+  const handleLogExpense = (category: string, amount: number, title: string) => {
+    startTransition(async () => {
+      const tempId = Date.now().toString();
+      const newExp: ExpenseItem = { id: tempId, amount, category, title, date: new Date().toISOString() };
+      setExpenses(prev => [newExp, ...prev]);
+      await logQuickExpense(category, amount, title);
+    });
+  };
+
+  const handleLogCustomExpense = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = parseFloat(customAmount);
+    if (!isNaN(amt) && customTitle.trim()) {
+      handleLogExpense('OTHER', amt, customTitle.trim());
+      setCustomAmount("");
+      setCustomTitle("");
+      setCustomExpenseOpen(false);
+    }
+  };
 
   // Filter schedules to show only today's schedules
   const getTodaySchedules = () => {
@@ -54,13 +173,23 @@ export default function DashboardClient({ initialTasks, initialSchedules }: { in
     return `${mins}m`;
   };
 
+  // Format Timer output
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  // Calculate total upcoming weekly fixed cost
+  const totalWeeklyFixedCosts = weeklyFixedCosts.reduce((sum, item) => sum + (item.cost || 0), 0);
+
   return (
     <>
       {/* Mobile Header */}
       <header className="md:hidden flex justify-between items-center p-6 bg-paper-dark sticky top-0 z-20 shadow-soft rounded-b-[2rem] mb-6">
         <div>
-          <p className="text-sm text-ink-light font-medium">Good morning,</p>
-          <h1 className="text-2xl font-bold">Best! ☀️</h1>
+          <p className="text-sm text-ink-light font-medium">{greeting.text.split(',')[0]},</p>
+          <h1 className="text-2xl font-bold">Best! {greeting.icon}</h1>
         </div>
         <button 
           onClick={() => setIsModalOpen(true)}
@@ -71,107 +200,323 @@ export default function DashboardClient({ initialTasks, initialSchedules }: { in
       </header>
 
       {/* Content Wrapper */}
-      <div className="flex-1 p-6 lg:p-10 flex flex-col lg:flex-row gap-8 lg:gap-12 max-w-[1600px] mx-auto w-full">
+      <div className={`flex-1 p-6 lg:p-10 flex flex-col gap-10 max-w-[1600px] mx-auto w-full transition-opacity ${isPending ? 'opacity-85' : ''}`}>
         
         {/* PC/Tablet Header (Only visible on larger screens) */}
-        <div className="hidden md:flex lg:hidden justify-between items-center w-full mb-4">
+        <div className="hidden md:flex justify-between items-center w-full">
            <div>
-             <p className="text-ink-light font-medium text-lg">Good morning,</p>
-             <h1 className="text-3xl font-bold">Best! ☀️</h1>
+             <p className="text-ink-light font-medium text-lg">{greeting.text.split(',')[0]},</p>
+             <h1 className="text-3xl font-bold">Best! {greeting.icon}</h1>
            </div>
            <button 
              onClick={() => setIsModalOpen(true)}
              className="bg-highlight hover:bg-highlight-alt text-paper px-6 py-3 rounded-full flex items-center gap-2 font-bold shadow-soft transition-transform hover:scale-105 active:scale-95 cursor-pointer"
            >
-             <Plus size={20} strokeWidth={3} /> Add New
+             <Plus size={20} strokeWidth={3} /> Add Task
            </button>
         </div>
-        
-        {/* Timeline & Schedule Panel (Left side on PC) */}
-        <section className="flex-1 lg:max-w-md xl:max-w-lg flex flex-col">
-          <div className="hidden lg:flex justify-between items-end mb-8">
-            <div>
-              <p className="text-ink-light font-medium mb-1">Good morning, Best! ☀️</p>
-              <h2 className="text-3xl font-bold">Today&apos;s Schedule</h2>
-            </div>
-          </div>
 
-          {/* Timeline Area */}
-          <div className="flex-1 bg-paper-dark rounded-[2.5rem] p-6 lg:p-8 shadow-soft border border-wheat-dark/20 relative">
-            <div className="flex flex-col gap-6 relative">
-              {todaySchedules && todaySchedules.length > 0 ? (
-                todaySchedules.map((schedule: ScheduleItem, index: number) => {
-                  const startTimeStr = new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                  const durationStr = calculateDuration(schedule.startTime, schedule.endTime);
-                  return (
-                    <TimeBlock 
-                      key={schedule.id}
-                      id={schedule.id}
-                      time={startTimeStr} 
-                      label={schedule.title} 
-                      duration={durationStr} 
-                      color="bg-wheat text-ink"
-                      isFirst={index === 0}
-                      isLast={index === todaySchedules.length - 1}
-                    />
-                  );
-                })
+        {/* Row 1: Schedule & Tasks */}
+        <div className="flex flex-col lg:flex-row gap-8 lg:gap-10">
+          {/* Timeline & Schedule Panel */}
+          <section className="flex-1 lg:max-w-md xl:max-w-lg flex flex-col">
+            <h2 className="text-2xl font-bold mb-6 text-ink flex items-center gap-2">
+              📅 Today&apos;s Schedule
+            </h2>
+
+            {/* Timeline Area */}
+            <div className="flex-1 bg-paper-dark rounded-[2.5rem] p-6 lg:p-8 shadow-soft border border-wheat-dark/20 relative">
+              <div className="flex flex-col gap-6 relative">
+                {todaySchedules && todaySchedules.length > 0 ? (
+                  todaySchedules.map((schedule: ScheduleItem, index: number) => {
+                    const startTimeStr = new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const durationStr = calculateDuration(schedule.startTime, schedule.endTime);
+                    return (
+                      <TimeBlock 
+                        key={schedule.id}
+                        id={schedule.id}
+                        time={startTimeStr} 
+                        label={schedule.title} 
+                        duration={durationStr} 
+                        color={schedule.isFixedCost ? "bg-amber-100 border-2 border-amber-300 text-amber-900" : "bg-wheat text-ink"}
+                        isFirst={index === 0}
+                        isLast={index === todaySchedules.length - 1}
+                      />
+                    );
+                  })
+                ) : (
+                  <div className="text-center text-ink-light py-10 font-medium">No schedules for today.</div>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* Task Management Panel */}
+          <section className="flex-[1.5] flex flex-col">
+            <h2 className="text-2xl font-bold mb-6 text-ink flex items-center gap-2">
+              🎯 Today&apos;s Focus
+            </h2>
+
+            <div className="flex flex-col gap-5">
+              {initialTasks && initialTasks.length > 0 ? (
+                initialTasks.map((task: TaskItem) => (
+                  <TaskCard 
+                    key={task.id}
+                    id={task.id}
+                    title={task.title} 
+                    tags={task.tags || []} 
+                    deadline={task.deadline}
+                    status={task.status}
+                    parentTask={task.parentTask}
+                    subtasks={task.subtasks}
+                  />
+                ))
               ) : (
-                <div className="text-center text-ink-light py-10">No schedules for today.</div>
+                <div className="bg-paper-dark border-2 border-wheat-dark border-dashed rounded-[2.5rem] p-10 text-center flex flex-col items-center justify-center cursor-pointer hover:bg-wheat/20 transition-colors"
+                  onClick={() => setIsModalOpen(true)}
+                >
+                  <div className="w-16 h-16 bg-wheat text-ink-light rounded-full flex items-center justify-center mb-4">
+                    <CheckCircle2 size={32} />
+                  </div>
+                  <h3 className="text-xl font-bold text-ink">All caught up!</h3>
+                  <p className="text-ink-light font-medium mt-1">Tap to add a new task.</p>
+                </div>
               )}
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
 
-        {/* Task Management Panel (Right side on PC) */}
-        <section className="flex-[1.5] flex flex-col">
-          <div className="hidden lg:flex justify-between items-center mb-8">
-            <h2 className="text-3xl font-bold">Today&apos;s Focus</h2>
-            <button 
-              onClick={() => setIsModalOpen(true)}
-              className="bg-highlight hover:bg-highlight-alt text-paper px-6 py-3 rounded-full flex items-center gap-2 font-bold shadow-soft transition-transform hover:scale-105 active:scale-95 cursor-pointer"
-            >
-              <Plus size={20} strokeWidth={3} /> Add Task
-            </button>
-          </div>
+        {/* Row 2: Health & Wealth Widgets */}
+        <section className="border-t border-wheat-dark/20 pt-10">
+          <h2 className="text-2xl font-bold mb-6 text-ink flex items-center gap-2">
+            🌱 Health & Wealth Hub
+          </h2>
 
-          {/* Mobile Title */}
-          <div className="lg:hidden flex justify-between items-center mb-6 mt-8">
-            <h2 className="text-2xl font-bold">Today&apos;s Focus</h2>
-            <button className="md:hidden text-ink-light hover:text-ink cursor-pointer"><MoreHorizontal /></button>
-          </div>
-
-          <div className="flex flex-col gap-5">
-            {initialTasks && initialTasks.length > 0 ? (
-              initialTasks.map((task: TaskItem) => (
-                <TaskCard 
-                  key={task.id}
-                  id={task.id}
-                  title={task.title} 
-                  tags={task.tags || []} 
-                  subtasksDone={0} 
-                  subtasksTotal={0} 
-                  deadline={task.deadline}
-                  estimatedMinutes={task.estimatedMinutes}
-                  status={task.status}
-                />
-              ))
-            ) : (
-              <div className="bg-paper-dark border-2 border-wheat-dark border-dashed rounded-[2.5rem] p-10 text-center flex flex-col items-center justify-center cursor-pointer hover:bg-wheat/20 transition-colors"
-                onClick={() => setIsModalOpen(true)}
-              >
-                <div className="w-16 h-16 bg-wheat text-ink-light rounded-full flex items-center justify-center mb-4">
-                  <CheckCircle2 size={32} />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
+            
+            {/* Widget 1: Water Intake */}
+            <div className="bg-paper-dark border-2 border-wheat rounded-[2.5rem] p-6 lg:p-8 shadow-soft flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div className="flex justify-between items-start mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center shadow-sm">
+                    <Droplet size={20} className={animateCup ? "animate-bounce" : ""} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-ink">Hydration</h3>
+                    <p className="text-xs text-ink-light/75 font-semibold">Goal: {waterGoal}ml</p>
+                  </div>
                 </div>
-                <h3 className="text-xl font-bold text-ink">All caught up!</h3>
-                <p className="text-ink-light font-medium mt-1">Tap to add a new task.</p>
+                <span className="text-lg font-extrabold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100 shadow-sm">{waterPercent}%</span>
               </div>
-            )}
+
+              {/* Cup Visual */}
+              <div className="my-6 flex justify-center">
+                <button 
+                  onClick={() => handleAddWater(250)}
+                  className={`relative w-24 h-28 border-x-4 border-b-4 border-wheat-dark/40 rounded-b-2xl flex items-end justify-center overflow-hidden cursor-pointer group transition-transform active:scale-95`}
+                >
+                  {/* Water inside cup */}
+                  <div 
+                    className="absolute bottom-0 w-full bg-blue-400/80 transition-all duration-700 ease-out"
+                    style={{ height: `${waterPercent}%` }}
+                  />
+                  {/* Text inside cup */}
+                  <span className="relative z-10 font-mono font-bold text-sm text-ink-light group-hover:text-blue-900 transition-colors mb-2">
+                    +250ml
+                  </span>
+                </button>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-bold text-ink">{waterMl} ml logged</span>
+                <button 
+                  onClick={() => handleAddWater(250)}
+                  className="bg-wheat hover:bg-wheat-dark text-ink font-bold text-xs px-4 py-2 rounded-xl transition-colors cursor-pointer"
+                >
+                  Quick Log Glass 🥛
+                </button>
+              </div>
+            </div>
+
+            {/* Widget 2: Pomodoro & Stretch Timer */}
+            <div className="bg-paper-dark border-2 border-wheat rounded-[2.5rem] p-6 lg:p-8 shadow-soft flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div className="flex justify-between items-start mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center shadow-sm">
+                    <Clock size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-ink">Focus Pomodoro</h3>
+                    <p className="text-xs text-ink-light/75 font-semibold">Stretch Reminder Enabled</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Timer Visual */}
+              <div className="flex flex-col items-center my-4">
+                <span className="font-mono text-4xl font-extrabold text-ink tracking-widest">{formatTime(timeLeft)}</span>
+                
+                {/* Duration select */}
+                <div className="flex gap-2 mt-4 bg-paper/60 p-1.5 rounded-xl border border-wheat-dark/20">
+                  {[25, 45, 60].map((mins) => (
+                    <button 
+                      key={mins}
+                      onClick={() => handleSetTimerMinutes(mins)}
+                      className={`px-3 py-1 text-xs font-bold rounded-lg cursor-pointer transition-colors
+                        ${timerMinutes === mins ? 'bg-wheat text-ink' : 'text-ink-light hover:text-ink'}`}
+                    >
+                      {mins}m
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Controls */}
+              <div className="flex gap-3 justify-center">
+                <button 
+                  onClick={handleStartPause}
+                  className={`flex-1 font-bold text-sm py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-sm
+                    ${timerActive ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200' : 'bg-highlight hover:bg-highlight-alt text-paper'}`}
+                >
+                  {timerActive ? <Pause size={16} /> : <Play size={16} />}
+                  {timerActive ? 'Pause' : 'Start'}
+                </button>
+                <button 
+                  onClick={handleResetTimer}
+                  className="bg-wheat hover:bg-wheat-dark text-ink p-2.5 rounded-xl transition-colors cursor-pointer shadow-sm"
+                  title="Reset"
+                >
+                  <RotateCcw size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Widget 3: Quick Expense & Fixed Cost Alerts */}
+            <div className="bg-paper-dark border-2 border-wheat rounded-[2.5rem] p-6 lg:p-8 shadow-soft flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div className="flex justify-between items-start mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 bg-green-50 text-green-500 rounded-2xl flex items-center justify-center shadow-sm">
+                    <Wallet size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-ink">Daily Expenses</h3>
+                    <p className="text-xs text-ink-light/75 font-semibold">Quick Tap Tracker</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Logging buttons */}
+              <div className="flex flex-col gap-3 my-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <button 
+                    onClick={() => handleLogExpense('COFFEE', 60, 'Coffee ☕')}
+                    className="flex flex-col items-center justify-center bg-paper hover:bg-wheat p-3 rounded-2xl border border-wheat-dark/20 transition-all active:scale-95 cursor-pointer shadow-sm"
+                  >
+                    <Coffee size={18} className="text-amber-700 mb-1" />
+                    <span className="text-[10px] font-bold text-ink-light">Coffee</span>
+                    <span className="text-xs font-extrabold text-ink mt-0.5">60฿</span>
+                  </button>
+                  <button 
+                    onClick={() => handleLogExpense('WATER', 10, 'Vending Water 🥤')}
+                    className="flex flex-col items-center justify-center bg-paper hover:bg-wheat p-3 rounded-2xl border border-wheat-dark/20 transition-all active:scale-95 cursor-pointer shadow-sm"
+                  >
+                    <Droplet size={18} className="text-blue-500 mb-1" />
+                    <span className="text-[10px] font-bold text-ink-light">Water</span>
+                    <span className="text-xs font-extrabold text-ink mt-0.5">10฿</span>
+                  </button>
+                  <button 
+                    onClick={() => handleLogExpense('TRANSPORT', 50, 'Daily Commute 🚗')}
+                    className="flex flex-col items-center justify-center bg-paper hover:bg-wheat p-3 rounded-2xl border border-wheat-dark/20 transition-all active:scale-95 cursor-pointer shadow-sm"
+                  >
+                    <Car size={18} className="text-gray-600 mb-1" />
+                    <span className="text-[10px] font-bold text-ink-light">Commute</span>
+                    <span className="text-xs font-extrabold text-ink mt-0.5">50฿</span>
+                  </button>
+                </div>
+
+                {/* Fixed Cost Alerts Area */}
+                {totalWeeklyFixedCosts > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl flex items-center gap-2.5">
+                    <AlertCircle size={20} className="text-amber-600 shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-[11px] font-bold text-amber-800">Weekly Fixed Costs (ปลิวก้อนโต)</p>
+                      <p className="text-xs font-extrabold text-amber-950">💸 {totalWeeklyFixedCosts}฿ will fly away this week</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Custom logs toggler */}
+              <div className="flex gap-2 items-center mt-3 pt-3 border-t border-wheat/60">
+                {customExpenseOpen ? (
+                  <form onSubmit={handleLogCustomExpense} className="flex gap-1.5 w-full">
+                    <input 
+                      type="text" 
+                      placeholder="Item"
+                      required
+                      value={customTitle}
+                      onChange={(e) => setCustomTitle(e.target.value)}
+                      className="flex-1 text-xs bg-paper border border-wheat-dark/30 rounded-lg px-2 py-1.5 outline-none font-medium"
+                    />
+                    <input 
+                      type="number" 
+                      placeholder="฿"
+                      required
+                      value={customAmount}
+                      onChange={(e) => setCustomAmount(e.target.value)}
+                      className="w-14 text-xs bg-paper border border-wheat-dark/30 rounded-lg px-2 py-1.5 outline-none font-extrabold"
+                    />
+                    <button type="submit" className="bg-highlight hover:bg-highlight-alt text-paper px-2.5 rounded-lg text-xs font-bold cursor-pointer">Log</button>
+                    <button type="button" onClick={() => setCustomExpenseOpen(false)} className="text-ink-light hover:text-ink p-1"><X size={14} /></button>
+                  </form>
+                ) : (
+                  <div className="flex justify-between items-center w-full">
+                    <span className="text-xs font-bold text-ink-light">
+                      Logged today: {expenses.reduce((s, e) => s + e.amount, 0)}฿
+                    </span>
+                    <button 
+                      onClick={() => setCustomExpenseOpen(true)}
+                      className="text-xs font-extrabold text-highlight hover:underline cursor-pointer"
+                    >
+                      + Custom Item
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
           </div>
         </section>
       </div>
 
-      <AddTaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      {/* Stretch Reminder Modal Overlay */}
+      {showStretchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/20 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-paper w-full max-w-sm rounded-[2.5rem] shadow-lg border-2 border-wheat-dark p-8 relative flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mb-6 shadow-soft">
+              <Sparkles size={32} />
+            </div>
+            
+            <h2 className="text-2xl font-black mb-2 text-ink">Time to Stretch! 🧘‍♂️</h2>
+            <p className="text-ink-light font-medium text-sm leading-relaxed mb-6">
+              Your focus block has finished. Stand up, rest your eyes, stretch your muscles, and take a quick glass of water! ✨
+            </p>
+            
+            <button 
+              onClick={() => {
+                setShowStretchModal(false);
+                handleAddWater(250); // Automatically log a water glass to encourage health!
+              }}
+              className="bg-highlight hover:bg-highlight-alt text-paper font-bold text-base px-8 py-3.5 rounded-full shadow-soft transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+            >
+              Done & Log Water 🥛
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add Task Modal */}
+      <AddTaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} existingTasks={initialTasks} />
     </>
   );
 }
