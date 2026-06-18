@@ -407,7 +407,7 @@ export default function DashboardClient({
                   </div>
                   <div>
                     <h3 className="font-bold text-ink">Focus Pomodoro</h3>
-                    <p className="text-xs text-ink-light/75 font-semibold font-semibold">Stretch Break Enabled</p>
+                    <p className="text-xs text-ink-light/75 font-semibold">Stretch Break Enabled</p>
                   </div>
                 </div>
               </div>
@@ -415,7 +415,47 @@ export default function DashboardClient({
               {/* Timer Visual */}
               <div className="flex flex-col items-center justify-center flex-1 my-6 w-full">
                 <span className="font-mono text-5xl font-extrabold text-ink tracking-widest">{formatTime(timeLeft)}</span>
-                <span className="text-xs font-bold text-ink-light mt-2">{timerMinutes}m Session</span>
+                {timerActive ? (
+                  <span className="text-xs font-bold text-ink-light mt-2">{timerMinutes}m Session</span>
+                ) : (
+                  <div className="flex items-center gap-2 mt-2 bg-paper/60 px-3 py-1 rounded-full border border-wheat-dark/30 shadow-inner">
+                    <button 
+                      onClick={() => {
+                        const newMins = Math.max(1, timerMinutes - 5);
+                        setTimerMinutes(newMins);
+                        setTimeLeft(newMins * 60);
+                      }}
+                      className="w-5 h-5 bg-wheat hover:bg-wheat-dark text-ink rounded-full flex items-center justify-center text-xs font-black cursor-pointer transition-colors shadow-sm"
+                      title="Decrease 5m"
+                    >
+                      -
+                    </button>
+                    <input 
+                      type="number"
+                      min="1"
+                      max="180"
+                      value={timerMinutes}
+                      onChange={(e) => {
+                        const mins = Math.max(1, Math.min(180, parseInt(e.target.value) || 1));
+                        setTimerMinutes(mins);
+                        setTimeLeft(mins * 60);
+                      }}
+                      className="w-8 text-center text-xs font-black text-ink bg-transparent border-none outline-none font-mono focus:ring-0 p-0"
+                    />
+                    <span className="text-xs font-bold text-ink-light mr-0.5">m</span>
+                    <button 
+                      onClick={() => {
+                        const newMins = Math.min(180, timerMinutes + 5);
+                        setTimerMinutes(newMins);
+                        setTimeLeft(newMins * 60);
+                      }}
+                      className="w-5 h-5 bg-wheat hover:bg-wheat-dark text-ink rounded-full flex items-center justify-center text-xs font-black cursor-pointer transition-colors shadow-sm"
+                      title="Increase 5m"
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Controls */}

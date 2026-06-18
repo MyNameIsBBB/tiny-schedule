@@ -9,6 +9,7 @@ interface NoteItem {
   title: string;
   content: string;
   type: string;
+  imageUrl?: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 }
@@ -18,6 +19,7 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<NoteItem | null>(null);
+  const [imageUrlVal, setImageUrlVal] = useState("");
   const [isPending, startTransition] = useTransition();
 
   // Filter notes based on search query
@@ -40,6 +42,7 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
+    formData.append("imageUrl", imageUrlVal);
     
     startTransition(async () => {
       if (editingNote) {
@@ -48,9 +51,16 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
         if (res.success) {
           const updatedTitle = formData.get("title") as string;
           const updatedContent = formData.get("content") as string;
-          setNotes(prev => prev.map(n => n.id === editingNote.id ? { ...n, title: updatedTitle, content: updatedContent, updatedAt: new Date().toISOString() } : n));
+          setNotes(prev => prev.map(n => n.id === editingNote.id ? { 
+            ...n, 
+            title: updatedTitle, 
+            content: updatedContent, 
+            imageUrl: imageUrlVal || null, 
+            updatedAt: new Date().toISOString() 
+          } : n));
           setIsModalOpen(false);
           setEditingNote(null);
+          setImageUrlVal("");
         }
       } else {
         formData.append("type", "NOTE");
@@ -64,11 +74,13 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
 
   const openAddModal = () => {
     setEditingNote(null);
+    setImageUrlVal("");
     setIsModalOpen(true);
   };
 
   const openEditModal = (note: NoteItem) => {
     setEditingNote(note);
+    setImageUrlVal(note.imageUrl || "");
     setIsModalOpen(true);
   };
 
@@ -150,7 +162,7 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
         </div>
         <button 
           onClick={openAddModal}
-          className="bg-highlight hover:bg-highlight-alt text-paper px-6 py-3 rounded-full flex items-center gap-2 font-bold shadow-soft transition-transform hover:scale-105 active:scale-95 cursor-pointer shrink-0"
+          className="bg-highlight hover:bg-highlight-alt text-paper px-6 py-3 rounded-full flex items-center gap-2 font-bold shadow-soft transition-transform hover:scale-105 active:scale-95 cursor-pointer"
         >
           <Plus size={20} strokeWidth={3} /> Add Note
         </button>
@@ -179,6 +191,11 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
               className={`bg-paper-dark border-2 border-wheat rounded-[2.5rem] p-6 lg:p-8 flex flex-col justify-between shadow-soft hover:shadow-md transition-all group relative`}
             >
               <div>
+                {note.imageUrl && (
+                  <div className="mb-5 overflow-hidden rounded-[1.8rem] border-2 border-wheat max-h-52 flex items-center justify-center bg-paper shadow-sm">
+                    <img src={note.imageUrl} alt={note.title} className="w-full h-full object-cover" />
+                  </div>
+                )}
                 <div className="flex justify-between items-start mb-4">
                   <h3 className="text-xl font-bold text-ink pr-8">{note.title}</h3>
                   <span className="p-1.5 text-ink-light/40 group-hover:text-ink-light shrink-0">
@@ -260,17 +277,70 @@ export default function NotesClient({ initialNotes }: { initialNotes: NoteItem[]
                 <textarea 
                   name="content" 
                   required 
-                  rows={8}
+                  rows={6}
                   defaultValue={editingNote?.content || ""}
                   placeholder={"1. Think of ideas\n2. Write them down\n\n- Quick note\n- **Bold text**"}
                   className="w-full max-w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl px-4 py-3 outline-none text-ink font-medium placeholder:text-ink-light/50 transition-colors box-border"
                 />
               </div>
 
+              <div className="w-full">
+                <label className="block text-sm font-bold text-ink-light mb-1 ml-2">Image URL (Optional)</label>
+                <input 
+                  type="text"
+                  placeholder="https://example.com/image.png"
+                  value={imageUrlVal}
+                  onChange={(e) => setImageUrlVal(e.target.value)}
+                  className="w-full max-w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl px-4 py-3 outline-none text-ink font-medium placeholder:text-ink-light/50 transition-colors box-border"
+                />
+              </div>
+
+              <div className="w-full">
+                <label className="block text-sm font-bold text-ink-light mb-1 ml-2">Or Upload Image File</label>
+                <div className="flex gap-3 items-center mt-1">
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setImageUrlVal(reader.result as string);
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="hidden"
+                    id="note-image-upload"
+                  />
+                  <label 
+                    htmlFor="note-image-upload"
+                    className="bg-wheat hover:bg-wheat-dark text-ink font-bold px-4 py-2.5 rounded-xl cursor-pointer transition-colors text-sm"
+                  >
+                    Choose Image...
+                  </label>
+                  {imageUrlVal && (
+                    <button 
+                      type="button"
+                      onClick={() => setImageUrlVal("")}
+                      className="bg-red-50 hover:bg-red-100 text-red-500 font-bold px-3 py-2.5 rounded-xl transition-colors text-sm cursor-pointer"
+                    >
+                      Remove Image
+                    </button>
+                  )}
+                </div>
+                {imageUrlVal && (
+                  <div className="mt-3 relative w-full h-32 rounded-2xl overflow-hidden border-2 border-wheat bg-paper flex items-center justify-center">
+                    <img src={imageUrlVal} alt="Note Preview" className="w-full h-full object-cover" />
+                  </div>
+                )}
+              </div>
+
               <button 
                 type="submit" 
                 disabled={isPending}
-                className="mt-6 w-full bg-highlight hover:bg-highlight-alt text-paper font-bold text-lg py-4 rounded-full shadow-soft transition-transform hover:-translate-y-1 active:scale-95 disabled:opacity-50 cursor-pointer box-border"
+                className="mt-4 w-full bg-highlight hover:bg-highlight-alt text-paper font-bold text-lg py-4 rounded-full shadow-soft transition-transform hover:-translate-y-1 active:scale-95 disabled:opacity-50 cursor-pointer box-border"
               >
                 {isPending ? 'Saving...' : 'Save Note'}
               </button>

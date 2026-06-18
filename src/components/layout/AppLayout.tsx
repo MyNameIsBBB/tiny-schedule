@@ -1,10 +1,13 @@
 "use client";
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { Home, Calendar, CheckSquare, Settings, FileText } from 'lucide-react';
+import { getSchedules, deleteSchedule } from '@/app/actions';
+import { addToast } from '@/lib/notifications';
+import ToastContainer from './ToastContainer';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -16,6 +19,41 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { href: '/notes', icon: <FileText />, label: 'Notes' },
     { href: '/settings', icon: <Settings />, label: 'Settings' },
   ];
+
+  useEffect(() => {
+    const checkPassedSchedules = async () => {
+      try {
+        const res = await getSchedules();
+        if (res.success && res.data) {
+          const now = new Date();
+          const passedSchedules = res.data.filter(schedule => {
+            return new Date(schedule.endTime) < now;
+          });
+
+          if (passedSchedules.length > 0) {
+            if (passedSchedules.length === 1) {
+              const schedule = passedSchedules[0];
+              const delRes = await deleteSchedule(schedule.id);
+              if (delRes.success) {
+                addToast(`📅 Schedule "${schedule.title}" has finished and was cleared!`);
+              }
+            } else {
+              for (const schedule of passedSchedules) {
+                await deleteSchedule(schedule.id);
+              }
+              addToast(`📅 ${passedSchedules.length} past schedules have been cleared!`);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error checking passed schedules:", error);
+      }
+    };
+
+    checkPassedSchedules();
+    const interval = setInterval(checkPassedSchedules, 15000); // Check every 15 seconds
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="min-h-screen bg-paper text-ink flex flex-col md:flex-row font-sans">
@@ -48,6 +86,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-screen overflow-y-auto relative pb-24 md:pb-0">
         {children}
+        <ToastContainer />
 
         {/* Mobile Bottom Nav */}
         <nav className="md:hidden fixed bottom-0 w-full bg-paper-dark border-t border-wheat-dark/30 p-4 flex justify-around items-center rounded-t-[2rem] shadow-[0_-4px_24px_rgba(74,62,61,0.05)] z-20 pb-safe">

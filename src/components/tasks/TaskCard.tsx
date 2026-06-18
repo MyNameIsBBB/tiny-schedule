@@ -4,6 +4,7 @@ import React, { useState, useTransition } from 'react';
 import { Clock, CheckCircle2, Circle, Trash2, Edit } from 'lucide-react';
 import { toggleTaskStatus, deleteTask, toggleSubtaskStatus } from '@/app/actions';
 import EditTaskModal from './EditTaskModal';
+import { addToast } from '@/lib/notifications';
 
 interface SubtaskItem {
   id: string;
@@ -38,13 +39,19 @@ export default function TaskCard({
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
     startTransition(async () => {
-      await toggleTaskStatus(id, status);
+      const res = await toggleTaskStatus(id, status);
+      if (res.success && res.deleted) {
+        addToast(`🎯 Task "${res.title}" completed & auto-deleted!`);
+      }
     });
   };
 
   const handleSubtaskToggle = (subtaskId: string, currentCompleted: boolean) => {
     startTransition(async () => {
-      await toggleSubtaskStatus(id, subtaskId, currentCompleted);
+      const res = await toggleSubtaskStatus(id, subtaskId, currentCompleted);
+      if (res.success && res.deleted) {
+        addToast(`🎯 All subtasks for "${res.title}" completed & auto-deleted!`);
+      }
     });
   };
 

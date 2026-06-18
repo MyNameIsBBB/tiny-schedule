@@ -170,7 +170,27 @@ export async function updateTask(formData: FormData) {
 
 export async function toggleTaskStatus(taskId: string, currentStatus: string) {
   try {
+    const task = await prisma.task.findUnique({
+      where: { id: taskId }
+    });
+    if (!task) return { success: false, error: "Task not found" };
+
     const newStatus = currentStatus === "COMPLETED" ? "TODO" : "COMPLETED";
+
+    // If it has no subtasks and is being completed, delete it
+    if (newStatus === "COMPLETED" && (!task.subtasks || task.subtasks.length === 0)) {
+      await prisma.task.updateMany({
+        where: { parentId: taskId },
+        data: { parentId: null }
+      });
+      await prisma.task.delete({
+        where: { id: taskId }
+      });
+      revalidatePath("/");
+      revalidatePath("/tasks");
+      return { success: true, deleted: true, title: task.title };
+    }
+
     await prisma.task.update({
       where: { id: taskId },
       data: { status: newStatus }
@@ -178,7 +198,7 @@ export async function toggleTaskStatus(taskId: string, currentStatus: string) {
 
     revalidatePath("/");
     revalidatePath("/tasks");
-    return { success: true };
+    return { success: true, deleted: false };
   } catch (error) {
     console.error("Failed to toggle task:", error);
     return { success: false, error: "Failed to update task" };
@@ -199,6 +219,21 @@ export async function toggleSubtaskStatus(taskId: string, subtaskId: string, cur
       return sub;
     });
 
+    const allCompleted = updatedSubtasks.length > 0 && updatedSubtasks.every(sub => sub.completed);
+
+    if (allCompleted) {
+      await prisma.task.updateMany({
+        where: { parentId: taskId },
+        data: { parentId: null }
+      });
+      await prisma.task.delete({
+        where: { id: taskId }
+      });
+      revalidatePath("/");
+      revalidatePath("/tasks");
+      return { success: true, deleted: true, title: task.title };
+    }
+
     await prisma.task.update({
       where: { id: taskId },
       data: { subtasks: updatedSubtasks }
@@ -206,7 +241,7 @@ export async function toggleSubtaskStatus(taskId: string, subtaskId: string, cur
 
     revalidatePath("/");
     revalidatePath("/tasks");
-    return { success: true };
+    return { success: true, deleted: false };
   } catch (error) {
     console.error("Failed to toggle subtask:", error);
     return { success: false, error: "Failed to toggle subtask" };
@@ -323,13 +358,15 @@ export async function createNote(formData: FormData) {
     const title = formData.get("title") as string;
     const content = formData.get("content") as string;
     const type = formData.get("type") as string || "NOTE";
+    const imageUrl = formData.get("imageUrl") as string || null;
 
     await prisma.note.create({
       data: {
         userId,
         title,
         content,
-        type
+        type,
+        imageUrl
       }
     });
 
@@ -346,12 +383,14 @@ export async function updateNote(formData: FormData) {
     const id = formData.get("id") as string;
     const title = formData.get("title") as string;
     const content = formData.get("content") as string;
+    const imageUrl = formData.get("imageUrl") as string || null;
 
     await prisma.note.update({
       where: { id },
       data: {
         title,
-        content
+        content,
+        imageUrl
       }
     });
 

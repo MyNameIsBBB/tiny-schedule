@@ -98,6 +98,7 @@ model Note {
   title     String
   content   String
   type      String   // 'SPEC' or 'SANDBOX'
+  imageUrl  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
