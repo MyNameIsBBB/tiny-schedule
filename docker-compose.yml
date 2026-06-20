@@ -8,7 +8,7 @@ services:
     container_name: tinyschedule-web
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3002:3000"
     environment:
       - NODE_ENV=production
       - DATABASE_URL=mongodb://mongo:27017/tinyschedule?replicaSet=rs0&directConnection=true
