@@ -299,6 +299,10 @@ export async function createSchedule(formData: FormData) {
     const cost = costStr ? parseFloat(costStr) : null;
     const isFixedCost = formData.get("isFixedCost") === "true" || formData.get("isFixedCost") === "on";
 
+    const isRoutine = formData.get("isRoutine") === "true" || formData.get("isRoutine") === "on";
+    const routineDaysStr = formData.get("routineDays") as string;
+    const routineDays = routineDaysStr ? routineDaysStr.split(",").map(Number) : [];
+
     await prisma.schedule.create({
       data: {
         userId,
@@ -307,7 +311,9 @@ export async function createSchedule(formData: FormData) {
         endTime,
         cost,
         isFixedCost,
-        isAllDay
+        isAllDay,
+        isRoutine,
+        routineDays
       }
     });
 

@@ -18,20 +18,75 @@ export default function ScheduleClient({ initialSchedules }: { initialSchedules:
 
   // Group schedules by Date
   const groupSchedulesByDate = () => {
-    const sorted = [...initialSchedules].sort((a, b) => {
-      if (a.isAllDay && !b.isAllDay) return -1;
-      if (!a.isAllDay && b.isAllDay) return 1;
-      return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
-    });
+    const normalSchedules = initialSchedules.filter(s => !s.isRoutine);
+    const routineSchedules = initialSchedules.filter(s => !!s.isRoutine);
+
+    // Get dates for the current week (Monday to Sunday)
+    const today = new Date();
+    const currentDay = today.getDay();
+    const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + distanceToMonday);
+    
+    const weekDates: Date[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      weekDates.push(d);
+    }
 
     const groups: { [key: string]: ScheduleItem[] } = {};
-    
-    sorted.forEach((schedule) => {
+
+    // 1. Group normal schedules
+    normalSchedules.forEach((schedule) => {
       const dateKey = new Date(schedule.startTime).toLocaleDateString('en-CA'); // YYYY-MM-DD
       if (!groups[dateKey]) {
         groups[dateKey] = [];
       }
       groups[dateKey].push(schedule);
+    });
+
+    // 2. Project routines onto the current week's dates
+    weekDates.forEach((date) => {
+      const dayOfWeek = date.getDay();
+      const dateKey = date.toLocaleDateString('en-CA');
+
+      const activeRoutines = routineSchedules.filter(r => {
+        const days = Array.isArray(r.routineDays) ? r.routineDays : [];
+        return days.includes(dayOfWeek);
+      });
+
+      activeRoutines.forEach((routine) => {
+        if (!groups[dateKey]) {
+          groups[dateKey] = [];
+        }
+
+        const setTimeToDate = (targetDate: Date, timeDate: Date | string) => {
+          const d = new Date(targetDate);
+          const t = new Date(timeDate);
+          d.setHours(t.getHours(), t.getMinutes(), t.getSeconds(), t.getMilliseconds());
+          return d;
+        };
+
+        const startTimeProj = setTimeToDate(date, routine.startTime);
+        const endTimeProj = setTimeToDate(date, routine.endTime);
+
+        groups[dateKey].push({
+          ...routine,
+          startTime: startTimeProj,
+          endTime: endTimeProj,
+          title: `🔄 ${routine.title}`
+        });
+      });
+    });
+
+    // Sort each group by time
+    Object.keys(groups).forEach((dateKey) => {
+      groups[dateKey].sort((a, b) => {
+        if (a.isAllDay && !b.isAllDay) return -1;
+        if (!a.isAllDay && b.isAllDay) return 1;
+        return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
+      });
     });
 
     return groups;

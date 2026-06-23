@@ -7,6 +7,8 @@ import { createSchedule } from '@/app/actions';
 export default function AddScheduleModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
   const [isPending, startTransition] = useTransition();
   const [isAllDay, setIsAllDay] = useState(false);
+  const [isRoutine, setIsRoutine] = useState(false);
+  const [routineDays, setRoutineDays] = useState<number[]>([]);
 
   if (!isOpen) return null;
 
@@ -64,6 +66,53 @@ export default function AddScheduleModal({ isOpen, onClose }: { isOpen: boolean,
               onChange={(e) => setIsAllDay(e.target.checked)}
               className="w-5 h-5 accent-highlight rounded cursor-pointer shrink-0"
             />
+          </div>
+
+          {/* Is Routine Checkbox */}
+          <div className="flex flex-col gap-2 px-2 py-1.5 w-full box-border border-t border-wheat-dark/15 pt-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="block text-sm font-bold text-ink">Is Repeating Routine? (กิจวัตรประจำวัน)</label>
+                <p className="text-[11px] text-ink-light">Check this for weekly recurring schedules (e.g. Morning Routine)</p>
+              </div>
+              <input 
+                type="checkbox"
+                name="isRoutine"
+                checked={isRoutine}
+                onChange={(e) => setIsRoutine(e.target.checked)}
+                className="w-5 h-5 accent-highlight rounded cursor-pointer shrink-0"
+              />
+            </div>
+            {isRoutine && (
+              <div className="flex flex-col gap-2 mt-2">
+                <label className="block text-xs font-bold text-ink-light ml-1">Repeat on Days (เลือกวัน):</label>
+                <div className="flex justify-between gap-1 w-full">
+                  {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => {
+                    const selected = routineDays.includes(idx);
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          if (selected) {
+                            setRoutineDays(routineDays.filter(d => d !== idx));
+                          } else {
+                            setRoutineDays([...routineDays, idx]);
+                          }
+                        }}
+                        className={`w-9 h-9 rounded-full font-bold text-xs flex items-center justify-center border-2 transition-all cursor-pointer
+                          ${selected 
+                            ? 'bg-highlight border-highlight text-paper shadow-sm' 
+                            : 'bg-paper-dark border-wheat text-ink-light hover:bg-wheat/10'}`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+                <input type="hidden" name="routineDays" value={routineDays.join(',')} />
+              </div>
+            )}
           </div>
 
           {!isAllDay && (

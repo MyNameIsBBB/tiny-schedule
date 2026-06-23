@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useTransition } from 'react';
+import Link from 'next/link';
 import { logoutUser } from '../actions';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Calendar } from 'lucide-react';
 
 interface ExpensePreset {
   id: string;
@@ -253,6 +254,23 @@ export default function SettingsPage() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+
+        {/* Daily Routines */}
+        <div className="bg-paper-dark rounded-[2.5rem] p-8 shadow-soft border border-wheat-dark/20 transition-colors">
+          <h2 className="text-xl font-bold text-ink mb-4 flex items-center gap-2">🔄 Daily Routines (ตารางกิจกรรมรายวัน)</h2>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-4">
+            <div>
+              <p className="font-bold text-ink">Manage Recurring Schedules</p>
+              <p className="text-sm text-ink-light">Configure blocks that repeat weekly on selected days of the week (e.g. Morning Wake Up).</p>
+            </div>
+            <Link 
+              href="/schedule"
+              className="bg-highlight hover:bg-highlight-alt text-paper px-6 py-3 rounded-full font-bold shadow-soft transition-transform hover:scale-105 active:scale-95 text-center shrink-0"
+            >
+              Go to Schedule Planner 📅
+            </Link>
           </div>
         </div>
 

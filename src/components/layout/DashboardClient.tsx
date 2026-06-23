@@ -62,6 +62,7 @@ export default function DashboardClient({
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [completedRoutines, setCompletedRoutines] = useState<{ [key: string]: boolean }>({});
 
   // Greeting State
   const [greeting, setGreeting] = useState({ text: "Good morning, Best!", icon: "☀️" });
@@ -159,6 +160,24 @@ export default function DashboardClient({
         console.error(e);
       }
     }
+
+    // Load daily routines completion status and clean up old ones
+    const todayKey = new Date().toLocaleDateString('en-CA');
+    const completions: { [key: string]: boolean } = {};
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('routine-')) {
+        if (key.startsWith(`routine-${todayKey}-`)) {
+          const routineId = key.replace(`routine-${todayKey}-`, '');
+          completions[routineId] = localStorage.getItem(key) === 'true';
+        } else {
+          keysToRemove.push(key);
+        }
+      }
+    }
+    setCompletedRoutines(completions);
+    keysToRemove.forEach(k => localStorage.removeItem(k));
   }, []);
 
   const handleLogExpense = (category: string, amount: number, title: string) => {
@@ -197,7 +216,7 @@ export default function DashboardClient({
     return initialSchedules
       .filter((schedule) => {
         const scheduleDateStr = new Date(schedule.startTime).toLocaleDateString('en-CA');
-        return scheduleDateStr === todayStr;
+        return !schedule.isRoutine && scheduleDateStr === todayStr;
       })
       .sort((a, b) => {
         if (a.isAllDay && !b.isAllDay) return -1;
@@ -205,6 +224,63 @@ export default function DashboardClient({
         return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
       });
   };
+
+  // Get today's active routines
+  const getTodayRoutines = () => {
+    const todayDay = new Date().getDay(); // 0 = Sun, 1 = Mon, ...
+    return initialSchedules.filter(s => {
+      if (!s.isRoutine) return false;
+      const days = Array.isArray(s.routineDays) ? s.routineDays : [];
+      return days.includes(todayDay);
+    }).sort((a, b) => {
+      const aHours = new Date(a.startTime).getHours();
+      const bHours = new Date(b.startTime).getHours();
+      if (aHours !== bHours) return aHours - bHours;
+      return new Date(a.startTime).getMinutes() - new Date(b.startTime).getMinutes();
+    });
+  };
+
+  const todayRoutines = getTodayRoutines();
+
+  const handleToggleRoutine = (id: string) => {
+    const todayKey = new Date().toLocaleDateString('en-CA');
+    const key = `routine-${todayKey}-${id}`;
+    const isCompleted = !completedRoutines[id];
+    
+    setCompletedRoutines(prev => ({
+      ...prev,
+      [id]: isCompleted
+    }));
+    
+    if (isCompleted) {
+      localStorage.setItem(key, 'true');
+    } else {
+      localStorage.removeItem(key);
+    }
+  };
+
+  const getRoutinePeriods = () => {
+    const periods: { morning: ScheduleItem[], afternoon: ScheduleItem[], evening: ScheduleItem[] } = {
+      morning: [],
+      afternoon: [],
+      evening: []
+    };
+    
+    todayRoutines.forEach(r => {
+      const startHour = new Date(r.startTime).getHours();
+      if (startHour < 12) {
+        periods.morning.push(r);
+      } else if (startHour < 17) {
+         periods.afternoon.push(r);
+      } else {
+        periods.evening.push(r);
+      }
+    });
+    
+    return periods;
+  };
+  
+  const routinePeriods = getRoutinePeriods();
 
   const todaySchedules = getTodaySchedules();
 
@@ -345,6 +421,102 @@ export default function DashboardClient({
                   <p className="text-ink-light font-medium mt-1">Tap to add a new task.</p>
                 </div>
               )}
+            </div>
+
+            {/* Daily Routine Checklist Widget */}
+            <div className="mt-10">
+              <h2 className="text-2xl font-bold mb-6 text-ink flex items-center gap-2">
+                🔄 Daily Routine (กิจวัตรประจำวัน)
+              </h2>
+
+              <div className="bg-paper-dark rounded-[2.5rem] p-6 lg:p-8 shadow-soft border border-wheat-dark/20 flex flex-col gap-6">
+                {todayRoutines && todayRoutines.length > 0 ? (
+                  <div className="flex flex-col gap-6">
+                    {/* Morning Period */}
+                    {routinePeriods.morning.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-bold text-ink-light uppercase tracking-wider mb-3 px-1">🌅 ช่วงเช้า (Morning)</h4>
+                        <div className="flex flex-col gap-3">
+                          {routinePeriods.morning.map((routine) => {
+                            const completed = !!completedRoutines[routine.id];
+                            const timeStr = new Date(routine.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            return (
+                              <div key={routine.id} className="flex items-center gap-3 bg-paper p-4 rounded-2xl border border-wheat-dark/20 shadow-sm transition-all hover:bg-wheat/10 cursor-pointer" onClick={() => handleToggleRoutine(routine.id)}>
+                                <input 
+                                  type="checkbox"
+                                  checked={completed}
+                                  onChange={() => {}}
+                                  className="w-5 h-5 accent-highlight rounded cursor-pointer shrink-0"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className={`font-bold text-sm sm:text-base leading-snug ${completed ? 'line-through text-ink-light font-medium' : 'text-ink'}`}>{routine.title}</p>
+                                  <p className="text-xs text-ink-light font-medium mt-0.5">{timeStr}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Afternoon Period */}
+                    {routinePeriods.afternoon.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-bold text-ink-light uppercase tracking-wider mb-3 px-1">☀️ ช่วงกลางวัน (Afternoon)</h4>
+                        <div className="flex flex-col gap-3">
+                          {routinePeriods.afternoon.map((routine) => {
+                            const completed = !!completedRoutines[routine.id];
+                            const timeStr = new Date(routine.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            return (
+                              <div key={routine.id} className="flex items-center gap-3 bg-paper p-4 rounded-2xl border border-wheat-dark/20 shadow-sm transition-all hover:bg-wheat/10 cursor-pointer" onClick={() => handleToggleRoutine(routine.id)}>
+                                <input 
+                                  type="checkbox"
+                                  checked={completed}
+                                  onChange={() => {}}
+                                  className="w-5 h-5 accent-highlight rounded cursor-pointer shrink-0"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className={`font-bold text-sm sm:text-base leading-snug ${completed ? 'line-through text-ink-light font-medium' : 'text-ink'}`}>{routine.title}</p>
+                                  <p className="text-xs text-ink-light font-medium mt-0.5">{timeStr}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Evening Period */}
+                    {routinePeriods.evening.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-bold text-ink-light uppercase tracking-wider mb-3 px-1">🌙 ช่วงเย็น-ค่ำ (Evening)</h4>
+                        <div className="flex flex-col gap-3">
+                          {routinePeriods.evening.map((routine) => {
+                            const completed = !!completedRoutines[routine.id];
+                            const timeStr = new Date(routine.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            return (
+                              <div key={routine.id} className="flex items-center gap-3 bg-paper p-4 rounded-2xl border border-wheat-dark/20 shadow-sm transition-all hover:bg-wheat/10 cursor-pointer" onClick={() => handleToggleRoutine(routine.id)}>
+                                <input 
+                                  type="checkbox"
+                                  checked={completed}
+                                  onChange={() => {}}
+                                  className="w-5 h-5 accent-highlight rounded cursor-pointer shrink-0"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className={`font-bold text-sm sm:text-base leading-snug ${completed ? 'line-through text-ink-light font-medium' : 'text-ink'}`}>{routine.title}</p>
+                                  <p className="text-xs text-ink-light font-medium mt-0.5">{timeStr}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center text-ink-light py-8 font-medium">ไม่มีกิจวัตรสำหรับวันนี้</div>
+                )}
+              </div>
             </div>
           </section>
         </div>

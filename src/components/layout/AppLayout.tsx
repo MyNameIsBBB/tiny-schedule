@@ -27,7 +27,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         if (res.success && res.data) {
           const now = new Date();
           const passedSchedules = res.data.filter(schedule => {
-            return new Date(schedule.endTime) < now;
+            return !schedule.isRoutine && new Date(schedule.endTime) < now;
           });
 
           if (passedSchedules.length > 0) {
