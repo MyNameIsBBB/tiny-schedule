@@ -12,6 +12,7 @@ interface TaskItem {
   title: string;
   tags?: string[];
   status: string;
+  startDate?: Date | string | null;
   deadline: Date | string | null;
   subtasks?: { id: string; title: string; completed: boolean }[];
   [key: string]: unknown;
@@ -75,10 +76,22 @@ export default function TasksClient({ initialTasks }: { initialTasks: TaskItem[]
 
   const getTasksForDate = (date: Date) => {
     const dateKey = date.toLocaleDateString('en-CA');
+    const cellDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    
     return initialTasks.filter(task => {
-      if (!task.deadline) return false;
-      const tDateStr = new Date(task.deadline).toLocaleDateString('en-CA');
-      return tDateStr === dateKey;
+      if (!task.deadline && !task.startDate) return false;
+      
+      if (task.startDate && task.deadline) {
+        const s = new Date(task.startDate);
+        const d = new Date(task.deadline);
+        const sDate = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+        const dDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        return cellDate >= sDate && cellDate <= dDate;
+      }
+      
+      const singleDate = task.deadline ? new Date(task.deadline) : new Date(task.startDate!);
+      const singleDateStr = singleDate.toLocaleDateString('en-CA');
+      return singleDateStr === dateKey;
     });
   };
 
@@ -153,6 +166,7 @@ export default function TasksClient({ initialTasks }: { initialTasks: TaskItem[]
                   id={task.id}
                   title={task.title} 
                   tags={task.tags || []} 
+                  startDate={task.startDate}
                   deadline={task.deadline}
                   status={task.status}
                   subtasks={task.subtasks}

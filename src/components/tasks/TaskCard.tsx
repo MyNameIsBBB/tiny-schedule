@@ -16,6 +16,7 @@ export default function TaskCard({
   id, 
   title, 
   tags = [], 
+  startDate,
   deadline, 
   status,
   subtasks = []
@@ -23,6 +24,7 @@ export default function TaskCard({
   id: string; 
   title: string; 
   tags?: string[]; 
+  startDate?: Date | string | null;
   deadline: Date | string | null; 
   status: string;
   subtasks?: SubtaskItem[];
@@ -71,19 +73,38 @@ export default function TaskCard({
 
   // Helper to format deadline
   const getDeadlineInfo = () => {
-    if (!deadline) return { label: "No deadline", isOverdue: false, isToday: false };
+    if (!deadline && !startDate) return { label: "No deadline", isOverdue: false, isToday: false };
     
-    const d = new Date(deadline);
     const today = new Date();
-    
-    const dDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const tDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    if (startDate && deadline) {
+      const s = new Date(startDate);
+      const d = new Date(deadline);
+      const sDateStr = s.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      const dDateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      
+      const dDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const sDate = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+      
+      const isOverdue = dDate.getTime() < tDate.getTime();
+      const isToday = tDate.getTime() >= sDate.getTime() && tDate.getTime() <= dDate.getTime();
+      
+      return {
+        label: `${sDateStr} - ${dDateStr}`,
+        isOverdue,
+        isToday
+      };
+    }
+    
+    const activeDate = deadline ? new Date(deadline) : new Date(startDate!);
+    const dDate = new Date(activeDate.getFullYear(), activeDate.getMonth(), activeDate.getDate());
     
     const diffTime = dDate.getTime() - tDate.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
     if (diffDays < 0) {
-      return { label: "Overdue", isOverdue: true, isToday: false };
+      return { label: deadline ? "Overdue" : "Started", isOverdue: deadline ? true : false, isToday: false };
     } else if (diffDays === 0) {
       return { label: "Today", isOverdue: false, isToday: true };
     } else if (diffDays === 1) {
@@ -92,7 +113,7 @@ export default function TaskCard({
       return { label: `${diffDays}d left`, isOverdue: false, isToday: false };
     } else {
       return { 
-        label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), 
+        label: activeDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), 
         isOverdue: false,
         isToday: false
       };
@@ -210,7 +231,7 @@ export default function TaskCard({
       <EditTaskModal 
         isOpen={isEditOpen} 
         onClose={() => setIsEditOpen(false)} 
-        task={{ id, title, tags, deadline, status, subtasks }} 
+        task={{ id, title, tags, startDate, deadline, status, subtasks }} 
       />
     </>
   );

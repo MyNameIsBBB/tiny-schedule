@@ -30,6 +30,7 @@ model Task {
   userId           String      @db.ObjectId
   title            String
   description      String?
+  startDate        DateTime?
   deadline         DateTime?
   status           TaskStatus  @default(TODO)
   tags             String[]

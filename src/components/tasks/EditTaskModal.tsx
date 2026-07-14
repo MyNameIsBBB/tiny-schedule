@@ -15,6 +15,7 @@ interface TaskItem {
   title: string;
   tags?: string[];
   status: string;
+  startDate?: Date | string | null;
   deadline: Date | string | null;
   subtasks?: SubtaskItem[];
 }
@@ -65,6 +66,10 @@ export default function EditTaskModal({
     setSubtasks(subtasks.filter(sub => sub.id !== id));
   };
 
+  const initialStartDateStr = task.startDate 
+    ? new Date(task.startDate).toLocaleDateString('en-CA') 
+    : "";
+
   const initialDateStr = task.deadline 
     ? new Date(task.deadline).toLocaleDateString('en-CA') 
     : "";
@@ -100,14 +105,25 @@ export default function EditTaskModal({
             />
           </div>
 
-          <div className="w-full">
-            <label className="block text-sm font-bold text-ink-light mb-1 ml-2">Deadline</label>
-            <input 
-              type="date"
-              name="deadline" 
-              defaultValue={initialDateStr}
-              className="w-full max-w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl px-4 py-3 outline-none text-ink font-medium transition-colors box-border"
-            />
+          <div className="grid grid-cols-2 gap-4 w-full box-border">
+            <div className="min-w-0">
+              <label className="block text-sm font-bold text-ink-light mb-1 ml-2">Start Date</label>
+              <input 
+                type="date"
+                name="startDate" 
+                defaultValue={initialStartDateStr}
+                className="w-full max-w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl px-4 py-3 outline-none text-ink font-medium transition-colors box-border"
+              />
+            </div>
+            <div className="min-w-0">
+              <label className="block text-sm font-bold text-ink-light mb-1 ml-2">Deadline (End)</label>
+              <input 
+                type="date"
+                name="deadline" 
+                defaultValue={initialDateStr}
+                className="w-full max-w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl px-4 py-3 outline-none text-ink font-medium transition-colors box-border"
+              />
+            </div>
           </div>
 
           {/* Subtasks Section */}

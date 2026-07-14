@@ -45,13 +45,29 @@ export default function ScheduleClient({ initialSchedules }: { initialSchedules:
 
     const groups: { [key: string]: ScheduleItem[] } = {};
 
+    const getDatesInRange = (start: Date, end: Date) => {
+      const dates: string[] = [];
+      const current = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+      const last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+      while (current <= last) {
+        dates.push(current.toLocaleDateString('en-CA'));
+        current.setDate(current.getDate() + 1);
+      }
+      return dates;
+    };
+
     // 1. Group normal schedules
     normalSchedules.forEach((schedule) => {
-      const dateKey = new Date(schedule.startTime).toLocaleDateString('en-CA'); // YYYY-MM-DD
-      if (!groups[dateKey]) {
-        groups[dateKey] = [];
-      }
-      groups[dateKey].push(schedule);
+      const start = new Date(schedule.startTime);
+      const end = new Date(schedule.endTime);
+      const dates = getDatesInRange(start, end);
+      
+      dates.forEach((dateKey) => {
+        if (!groups[dateKey]) {
+          groups[dateKey] = [];
+        }
+        groups[dateKey].push(schedule);
+      });
     });
 
     // 2. Project routines onto the current week's dates
@@ -176,8 +192,12 @@ export default function ScheduleClient({ initialSchedules }: { initialSchedules:
     // Normal schedules
     const normal = initialSchedules.filter(s => {
       if (s.isRoutine) return false;
-      const sDateStr = new Date(s.startTime).toLocaleDateString('en-CA');
-      return sDateStr === dateKey;
+      const sStart = new Date(s.startTime);
+      const sEnd = new Date(s.endTime);
+      const cellDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const startDate = new Date(sStart.getFullYear(), sStart.getMonth(), sStart.getDate());
+      const endDate = new Date(sEnd.getFullYear(), sEnd.getMonth(), sEnd.getDate());
+      return cellDate >= startDate && cellDate <= endDate;
     });
     
     // Repeat routines

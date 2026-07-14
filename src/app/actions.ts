@@ -99,6 +99,8 @@ export async function createTask(formData: FormData) {
     const tagsStr = formData.get("tags") as string;
     const tags = tagsStr ? tagsStr.split(",").map(t => t.trim()) : [];
     
+    const startDateStr = formData.get("startDate") as string;
+    const startDate = startDateStr ? new Date(startDateStr) : null;
     const deadlineStr = formData.get("deadline") as string;
     const deadline = deadlineStr ? new Date(deadlineStr) : null;
     
@@ -126,6 +128,7 @@ export async function createTask(formData: FormData) {
         title,
         tags,
         status: "TODO",
+        startDate,
         deadline,
         parentId,
         subtasks
@@ -148,6 +151,8 @@ export async function updateTask(formData: FormData) {
     const tagsStr = formData.get("tags") as string;
     const tags = tagsStr ? tagsStr.split(",").map(t => t.trim()) : [];
     
+    const startDateStr = formData.get("startDate") as string;
+    const startDate = startDateStr ? new Date(startDateStr) : null;
     const deadlineStr = formData.get("deadline") as string;
     const deadline = deadlineStr ? new Date(deadlineStr) : null;
     
@@ -173,6 +178,7 @@ export async function updateTask(formData: FormData) {
       data: {
         title,
         tags,
+        startDate,
         deadline,
         subtasks
       }
@@ -306,13 +312,14 @@ export async function createSchedule(formData: FormData) {
     const userId = await getDefaultUserId();
     const title = formData.get("title") as string;
     
-    const dateStr = formData.get("date") as string;
+    const startDateStr = formData.get("startDate") as string;
+    const endDateStr = formData.get("endDate") as string || startDateStr;
     const isAllDay = formData.get("isAllDay") === "true" || formData.get("isAllDay") === "on";
     const startTimeStr = isAllDay ? "00:00" : (formData.get("startTime") as string || "00:00");
     const endTimeStr = isAllDay ? "23:59" : (formData.get("endTime") as string || "23:59");
 
-    const startTime = new Date(`${dateStr}T${startTimeStr}:00`);
-    const endTime = new Date(`${dateStr}T${endTimeStr}:00`);
+    const startTime = new Date(`${startDateStr}T${startTimeStr}:00`);
+    const endTime = new Date(`${endDateStr}T${endTimeStr}:00`);
 
     const costStr = formData.get("cost") as string;
     const cost = costStr ? parseFloat(costStr) : null;
@@ -674,6 +681,7 @@ export async function importTasksAction(tasks: any[]) {
           title: task.title || "Untitled Task",
           description: task.description || null,
           status: task.status === "COMPLETED" ? "COMPLETED" : "TODO",
+          startDate: task.startDate ? new Date(task.startDate) : null,
           deadline: task.deadline ? new Date(task.deadline) : null,
           tags: Array.isArray(task.tags) ? task.tags : [],
           subtasks: Array.isArray(task.subtasks) ? task.subtasks.map((s: any, idx: number) => ({
@@ -698,6 +706,7 @@ export async function importTasksAction(tasks: any[]) {
           title: task.title || "Untitled Task",
           description: task.description || null,
           status: task.status === "COMPLETED" ? "COMPLETED" : "TODO",
+          startDate: task.startDate ? new Date(task.startDate) : null,
           deadline: task.deadline ? new Date(task.deadline) : null,
           tags: Array.isArray(task.tags) ? task.tags : [],
           parentId: newParentId,
