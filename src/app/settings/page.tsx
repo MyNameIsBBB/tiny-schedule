@@ -2,36 +2,35 @@
 
 import React, { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
-import { logoutUser } from '../actions';
-import { Trash2, Calendar } from 'lucide-react';
-
-interface ExpensePreset {
-  id: string;
-  name: string;
-  emoji: string;
-  amount: number;
-  category: string;
-}
+import { 
+  logoutUser, 
+  check2FAStatus, 
+  generate2FASecret, 
+  enable2FA, 
+  disable2FA,
+  getTasks,
+  getSchedules,
+  importTasksAction,
+  importSchedulesAction
+} from '../actions';
+import { Trash2, Calendar, Lock, ShieldCheck, Download, Upload, Eye } from 'lucide-react';
+import { addToast } from '@/lib/notifications';
 
 export default function SettingsPage() {
   const [theme, setTheme] = useState('light');
   const [isPending, startTransition] = useTransition();
-
-  // Water Settings
-  const [waterGoal, setWaterGoal] = useState(2000);
-  const [waterLogAmount, setWaterLogAmount] = useState(250);
+  const [savedMessage, setSavedMessage] = useState("");
 
   // Focus Timer Settings
   const [defaultFocusMinutes, setDefaultFocusMinutes] = useState(25);
 
-  // Expense Settings
-  const [expensePresets, setExpensePresets] = useState<ExpensePreset[]>([
-    { id: '1', name: 'Coffee', emoji: '☕', amount: 60, category: 'COFFEE' },
-    { id: '2', name: 'Water', emoji: '🥤', amount: 10, category: 'WATER' },
-    { id: '3', name: 'Commute', emoji: '🚗', amount: 50, category: 'TRANSPORT' }
-  ]);
-
-  const [savedMessage, setSavedMessage] = useState("");
+  // Security (2FA) State
+  const [totpEnabled, setTotpEnabled] = useState(false);
+  const [totpSecret, setTotpSecret] = useState("");
+  const [otpauthUrl, setOtpauthUrl] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [setupStep, setSetupStep] = useState<'idle' | 'setup' | 'disable'>('idle');
+  const [totpError, setTotpError] = useState("");
 
   // Load persisted theme and settings
   useEffect(() => {
@@ -39,23 +38,16 @@ export default function SettingsPage() {
     setTheme(savedTheme);
     applyTheme(savedTheme);
 
-    const storedGoal = localStorage.getItem('water_goal');
-    if (storedGoal) setWaterGoal(Number(storedGoal));
-    
-    const storedLog = localStorage.getItem('water_log_amount');
-    if (storedLog) setWaterLogAmount(Number(storedLog));
-
     const storedFocus = localStorage.getItem('focus_default_minutes');
     if (storedFocus) setDefaultFocusMinutes(Number(storedFocus));
 
-    const storedPresets = localStorage.getItem('expense_presets');
-    if (storedPresets) {
-      try {
-        setExpensePresets(JSON.parse(storedPresets));
-      } catch (e) {
-        console.error(e);
+    // Load 2FA status
+    startTransition(async () => {
+      const res = await check2FAStatus();
+      if (res.success) {
+        setTotpEnabled(!!res.enabled);
       }
-    }
+    });
   }, []);
 
   const applyTheme = (t: string) => {
@@ -84,11 +76,7 @@ export default function SettingsPage() {
   };
 
   const saveSettings = () => {
-    localStorage.setItem('water_goal', String(waterGoal));
-    localStorage.setItem('water_log_amount', String(waterLogAmount));
     localStorage.setItem('focus_default_minutes', String(defaultFocusMinutes));
-    localStorage.setItem('expense_presets', JSON.stringify(expensePresets));
-    
     setSavedMessage("Settings saved successfully!");
     setTimeout(() => setSavedMessage(""), 3000);
   };
@@ -101,23 +89,157 @@ export default function SettingsPage() {
     }
   };
 
-  const handleAddPresetRow = () => {
-    const newRow: ExpensePreset = {
-      id: `preset-${Date.now()}-${Math.random()}`,
-      name: 'New Item',
-      emoji: '🏷️',
-      amount: 50,
-      category: 'OTHER'
+  // 2FA Handlers
+  const handleInitiate2FA = () => {
+    setTotpError("");
+    setVerificationCode("");
+    startTransition(async () => {
+      const res = await generate2FASecret();
+      if (res.success && res.secret && res.otpauthUrl) {
+        setTotpSecret(res.secret);
+        setOtpauthUrl(res.otpauthUrl);
+        setSetupStep('setup');
+      } else {
+        setTotpError(res.error || "Failed to generate secret key.");
+      }
+    });
+  };
+
+  const handleVerifyAndEnable = () => {
+    if (!verificationCode || verificationCode.length !== 6) {
+      setTotpError("Please enter a 6-digit verification code.");
+      return;
+    }
+    setTotpError("");
+    startTransition(async () => {
+      const res = await enable2FA(totpSecret, verificationCode);
+      if (res.success) {
+        setTotpEnabled(true);
+        setSetupStep('idle');
+        setVerificationCode("");
+        addToast("🔒 Authenticator App 2FA successfully enabled!");
+      } else {
+        setTotpError(res.error || "Verification failed. Please try again.");
+      }
+    });
+  };
+
+  const handleDisable2FA = () => {
+    if (!verificationCode || verificationCode.length !== 6) {
+      setTotpError("Please enter a 6-digit verification code.");
+      return;
+    }
+    setTotpError("");
+    startTransition(async () => {
+      const res = await disable2FA(verificationCode);
+      if (res.success) {
+        setTotpEnabled(false);
+        setSetupStep('idle');
+        setVerificationCode("");
+        addToast("🔓 2FA successfully disabled.");
+      } else {
+        setTotpError(res.error || "Verification failed.");
+      }
+    });
+  };
+
+  // JSON Import/Export handlers
+  const handleExportTasks = () => {
+    startTransition(async () => {
+      const res = await getTasks();
+      if (res.success && res.data) {
+        // Clean prisma specific objects if needed, but simple stringify is fine
+        const dataStr = JSON.stringify(res.data, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.download = `tinyschedule_tasks_${new Date().toISOString().slice(0,10)}.json`;
+        link.href = url;
+        link.click();
+        addToast("📥 Tasks backup downloaded!");
+      } else {
+        addToast("❌ Failed to export tasks.");
+      }
+    });
+  };
+
+  const handleExportSchedules = () => {
+    startTransition(async () => {
+      const res = await getSchedules();
+      if (res.success && res.data) {
+        const dataStr = JSON.stringify(res.data, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.download = `tinyschedule_schedules_${new Date().toISOString().slice(0,10)}.json`;
+        link.href = url;
+        link.click();
+        addToast("📥 Schedules backup downloaded!");
+      } else {
+        addToast("❌ Failed to export schedules.");
+      }
+    });
+  };
+
+  const handleImportTasks = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parsed = JSON.parse(text);
+        if (!Array.isArray(parsed)) {
+          addToast("❌ Invalid file format. Expected an array of tasks.");
+          return;
+        }
+
+        startTransition(async () => {
+          const res = await importTasksAction(parsed);
+          if (res.success) {
+            addToast(`✅ Successfully imported ${res.count} tasks!`);
+            // Reset file input value
+            e.target.value = '';
+          } else {
+            addToast(`❌ Import failed: ${res.error}`);
+          }
+        });
+      } catch (err) {
+        addToast("❌ Failed to parse JSON file.");
+      }
     };
-    setExpensePresets([...expensePresets, newRow]);
+    reader.readAsText(file);
   };
 
-  const handleRemovePresetRow = (id: string) => {
-    setExpensePresets(expensePresets.filter(p => p.id !== id));
-  };
+  const handleImportSchedules = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  const handlePresetChange = (id: string, field: keyof ExpensePreset, val: string | number) => {
-    setExpensePresets(expensePresets.map(p => p.id === id ? { ...p, [field]: val } : p));
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parsed = JSON.parse(text);
+        if (!Array.isArray(parsed)) {
+          addToast("❌ Invalid file format. Expected an array of schedules.");
+          return;
+        }
+
+        startTransition(async () => {
+          const res = await importSchedulesAction(parsed);
+          if (res.success) {
+            addToast(`✅ Successfully imported ${res.count} schedules!`);
+            e.target.value = '';
+          } else {
+            addToast(`❌ Import failed: ${res.error}`);
+          }
+        });
+      } catch (err) {
+        addToast("❌ Failed to parse JSON file.");
+      }
+    };
+    reader.readAsText(file);
   };
 
   return (
@@ -159,36 +281,9 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Widgets configuration */}
+        {/* Focus Timer */}
         <div className="bg-paper-dark rounded-[2.5rem] p-8 shadow-soft border border-wheat-dark/20 transition-colors">
-          <h2 className="text-xl font-bold text-ink mb-6">Widgets Presets</h2>
-          
-          {/* Water Tracker */}
-          <div className="py-4 border-b border-wheat-dark/30">
-            <h3 className="font-bold text-ink mb-2">💧 Hydration Tracker</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-              <div className="w-full">
-                <label className="block text-sm font-bold text-ink-light mb-1 ml-1">Daily Goal (ml)</label>
-                <input 
-                  type="number"
-                  value={waterGoal}
-                  onChange={(e) => setWaterGoal(Number(e.target.value) || 2000)}
-                  className="w-full max-w-full px-4 py-2 bg-paper border-2 border-wheat focus:border-highlight rounded-xl outline-none font-bold text-ink box-border"
-                />
-              </div>
-              <div className="w-full">
-                <label className="block text-sm font-bold text-ink-light mb-1 ml-1">Quick Log Glass (ml)</label>
-                <input 
-                  type="number"
-                  value={waterLogAmount}
-                  onChange={(e) => setWaterLogAmount(Number(e.target.value) || 250)}
-                  className="w-full max-w-full px-4 py-2 bg-paper border-2 border-wheat focus:border-highlight rounded-xl outline-none font-bold text-ink box-border"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Focus Timer */}
+          <h2 className="text-xl font-bold text-ink mb-4">Focus Timer Settings</h2>
           <div className="py-4 border-b border-wheat-dark/30">
             <h3 className="font-bold text-ink mb-2">⏱️ Pomodoro Focus Timer</h3>
             <div className="w-full mt-3">
@@ -203,61 +298,217 @@ export default function SettingsPage() {
               />
             </div>
           </div>
+        </div>
 
-          {/* Daily Expenses */}
-          <div className="py-4">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-ink">💸 Daily Expenses Quick Buttons</h3>
-              <button onClick={handleAddPresetRow} className="text-sm font-bold text-highlight hover:underline">+ Add Preset</button>
+        {/* Security (2FA) */}
+        <div className="bg-paper-dark rounded-[2.5rem] p-8 shadow-soft border border-wheat-dark/20 transition-colors">
+          <h2 className="text-xl font-bold text-ink mb-4 flex items-center gap-2">
+            <Lock size={20} className="text-highlight" /> Security & Authentication
+          </h2>
+          
+          <div className="py-4 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-wheat-dark/30 pb-4">
+              <div>
+                <p className="font-bold text-ink">Two-Factor Authentication (2FA)</p>
+                <p className="text-sm text-ink-light">Require a code from an authenticator app (Google Authenticator, Authy, etc.) during login.</p>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                {totpEnabled ? (
+                  <span className="bg-green-100 text-green-800 text-xs px-3 py-1.5 rounded-full font-extrabold flex items-center gap-1">
+                    <ShieldCheck size={14} /> Active
+                  </span>
+                ) : (
+                  <span className="bg-wheat text-ink-light text-xs px-3 py-1.5 rounded-full font-bold">
+                    Disabled
+                  </span>
+                )}
+              </div>
             </div>
-            
-            <div className="flex flex-col gap-3">
-              {expensePresets.map((preset) => (
-                <div key={preset.id} className="flex flex-wrap md:flex-nowrap gap-2 items-center bg-paper p-3 rounded-2xl border-2 border-wheat-dark/30 w-full box-border">
-                  <input 
-                    type="text" 
-                    value={preset.emoji}
-                    onChange={(e) => handlePresetChange(preset.id, 'emoji', e.target.value)}
-                    placeholder="☕" 
-                    className="w-12 text-center text-sm bg-paper-dark border border-wheat-dark/30 rounded-xl px-1 py-2 outline-none"
-                  />
-                  <input 
-                    type="text" 
-                    value={preset.name}
-                    onChange={(e) => handlePresetChange(preset.id, 'name', e.target.value)}
-                    placeholder="Name" 
-                    className="flex-1 min-w-0 text-sm bg-paper-dark border border-wheat-dark/30 rounded-xl px-3 py-2 outline-none font-medium"
-                  />
-                  <input 
-                    type="number" 
-                    value={preset.amount}
-                    onChange={(e) => handlePresetChange(preset.id, 'amount', Number(e.target.value) || 0)}
-                    placeholder="฿" 
-                    className="w-20 text-sm bg-paper-dark border border-wheat-dark/30 rounded-xl px-2 py-2 outline-none text-center font-bold"
-                  />
-                  <select 
-                    value={preset.category}
-                    onChange={(e) => handlePresetChange(preset.id, 'category', e.target.value)}
-                    className="text-xs bg-paper-dark border border-wheat-dark/30 rounded-xl px-2 py-2 outline-none font-bold"
-                  >
-                    <option value="COFFEE">Coffee</option>
-                    <option value="WATER">Water</option>
-                    <option value="TRANSPORT">Commute</option>
-                    <option value="OTHER">Other</option>
-                  </select>
+
+            {setupStep === 'idle' && (
+              <div className="flex justify-end">
+                {totpEnabled ? (
                   <button 
-                    onClick={() => handleRemovePresetRow(preset.id)}
-                    className="text-red-500 hover:text-red-700 p-2 bg-red-50 rounded-xl ml-auto"
+                    onClick={() => {
+                      setVerificationCode("");
+                      setTotpError("");
+                      setSetupStep('disable');
+                    }}
+                    className="px-6 py-2 bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded-full font-bold text-sm cursor-pointer transition-colors"
                   >
-                    <Trash2 size={16} />
+                    Disable 2FA
+                  </button>
+                ) : (
+                  <button 
+                    onClick={handleInitiate2FA}
+                    className="px-6 py-2.5 bg-highlight hover:bg-highlight-alt text-paper rounded-full font-bold text-sm cursor-pointer shadow-soft transition-transform hover:scale-105 active:scale-95"
+                  >
+                    Setup Authenticator App
+                  </button>
+                )}
+              </div>
+            )}
+
+            {setupStep === 'setup' && (
+              <div className="bg-paper border border-wheat p-6 rounded-3xl flex flex-col gap-4 mt-2 max-w-lg">
+                <h4 className="font-extrabold text-ink">Setup Authenticator App</h4>
+                <p className="text-xs text-ink-light leading-relaxed">
+                  1. Scan the QR code using Google Authenticator, Authy, or another authenticator app. If you cannot scan, manually type in the secret key.
+                </p>
+                
+                <div className="flex flex-col sm:flex-row items-center gap-6 my-2">
+                  <div className="bg-white p-3 rounded-2xl border border-wheat flex items-center justify-center shrink-0">
+                    {/* Public secure QR generator API (browser fetches directly, no private data shared) */}
+                    <img 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(otpauthUrl)}`}
+                      alt="TOTP QR Code"
+                      width={160}
+                      height={160}
+                      className="object-contain"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[11px] font-bold text-ink-light uppercase tracking-wider mb-1">Manual Entry Key</p>
+                    <code className="block bg-paper-dark border border-wheat rounded-xl px-3 py-2 text-xs font-mono font-bold select-all break-all text-ink">
+                      {totpSecret.replace(/(.{4})/g, '$1 ').trim()}
+                    </code>
+                    <p className="text-[10px] text-ink-light/80 mt-1 leading-snug">Double click to copy, then enter into your app.</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 border-t border-wheat/60 pt-4 mt-2">
+                  <label className="block text-xs font-bold text-ink-light">2. Verify & Activate: Enter the 6-digit code</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      maxLength={6} 
+                      placeholder="000 000"
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                      className="w-full sm:w-1/2 bg-paper-dark border-2 border-wheat focus:border-highlight rounded-xl px-4 py-2 outline-none font-extrabold text-center text-lg tracking-wider"
+                    />
+                    <button 
+                      onClick={handleVerifyAndEnable}
+                      className="bg-highlight hover:bg-highlight-alt text-paper px-6 py-2 rounded-xl font-bold text-sm cursor-pointer shadow-soft transition-transform active:scale-95 shrink-0"
+                    >
+                      Verify & Activate
+                    </button>
+                  </div>
+                </div>
+
+                {totpError && <p className="text-red-500 text-xs font-bold animate-pulse">{totpError}</p>}
+                
+                <div className="flex justify-end mt-2">
+                  <button 
+                    onClick={() => setSetupStep('idle')}
+                    className="text-xs font-bold text-ink-light hover:underline"
+                  >
+                    Cancel
                   </button>
                 </div>
-              ))}
+              </div>
+            )}
+
+            {setupStep === 'disable' && (
+              <div className="bg-red-50/50 border border-red-200 p-6 rounded-3xl flex flex-col gap-4 mt-2 max-w-lg">
+                <h4 className="font-extrabold text-red-800">Deactivate 2FA</h4>
+                <p className="text-xs text-red-950 font-medium leading-relaxed">
+                  For security, please enter the current 6-digit code from your authenticator app to disable two-factor authentication.
+                </p>
+
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    maxLength={6} 
+                    placeholder="000 000"
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                    className="w-full sm:w-1/2 bg-paper border-2 border-red-200 focus:border-red-500 rounded-xl px-4 py-2 outline-none font-extrabold text-center text-lg tracking-wider text-red-900"
+                  />
+                  <button 
+                    onClick={handleDisable2FA}
+                    className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-xl font-bold text-sm cursor-pointer shadow-soft transition-transform active:scale-95 shrink-0"
+                  >
+                    Confirm Deactivation
+                  </button>
+                </div>
+
+                {totpError && <p className="text-red-500 text-xs font-bold animate-pulse">{totpError}</p>}
+
+                <div className="flex justify-end mt-2">
+                  <button 
+                    onClick={() => setSetupStep('idle')}
+                    className="text-xs font-bold text-ink-light hover:underline"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Data Backup & Portability (JSON) */}
+        <div className="bg-paper-dark rounded-[2.5rem] p-8 shadow-soft border border-wheat-dark/20 transition-colors">
+          <h2 className="text-xl font-bold text-ink mb-6 flex items-center gap-2">
+            📂 Data Portability (JSON Import/Export)
+          </h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Tasks Section */}
+            <div className="bg-paper border border-wheat p-6 rounded-[2rem] flex flex-col justify-between">
+              <div>
+                <h3 className="font-bold text-ink flex items-center gap-1.5 mb-2">🎯 Tasks Backup</h3>
+                <p className="text-xs text-ink-light leading-relaxed mb-4">Export all tasks (including subtasks and hierarchy) or restore from a JSON file.</p>
+              </div>
+              <div className="flex flex-col gap-2 mt-4">
+                <button 
+                  onClick={handleExportTasks}
+                  className="bg-wheat hover:bg-wheat-dark text-ink font-bold text-xs px-4 py-2.5 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <Download size={14} /> Export Tasks to JSON
+                </button>
+                <label className="bg-paper hover:bg-wheat/20 text-ink-light hover:text-ink font-bold text-xs px-4 py-2.5 rounded-xl border border-wheat-dark/30 transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm text-center">
+                  <Upload size={14} /> Import Tasks from JSON
+                  <input 
+                    type="file" 
+                    accept=".json" 
+                    onChange={handleImportTasks} 
+                    className="hidden" 
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Schedules Section */}
+            <div className="bg-paper border border-wheat p-6 rounded-[2rem] flex flex-col justify-between">
+              <div>
+                <h3 className="font-bold text-ink flex items-center gap-1.5 mb-2">📅 Schedules Backup</h3>
+                <p className="text-xs text-ink-light leading-relaxed mb-4">Export all time blocks and repeat routines or restore them from a JSON file.</p>
+              </div>
+              <div className="flex flex-col gap-2 mt-4">
+                <button 
+                  onClick={handleExportSchedules}
+                  className="bg-wheat hover:bg-wheat-dark text-ink font-bold text-xs px-4 py-2.5 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <Download size={14} /> Export Schedules to JSON
+                </button>
+                <label className="bg-paper hover:bg-wheat/20 text-ink-light hover:text-ink font-bold text-xs px-4 py-2.5 rounded-xl border border-wheat-dark/30 transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm text-center">
+                  <Upload size={14} /> Import Schedules from JSON
+                  <input 
+                    type="file" 
+                    accept=".json" 
+                    onChange={handleImportSchedules} 
+                    className="hidden" 
+                  />
+                </label>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Daily Routines */}
+        {/* Daily Routines navigation link */}
         <div className="bg-paper-dark rounded-[2.5rem] p-8 shadow-soft border border-wheat-dark/20 transition-colors">
           <h2 className="text-xl font-bold text-ink mb-4 flex items-center gap-2">🔄 Daily Routines (ตารางกิจกรรมรายวัน)</h2>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-4">

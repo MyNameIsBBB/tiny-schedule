@@ -5,32 +5,51 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { signJWT } from "@/lib/jwt";
 import { redirect } from "next/navigation";
+import { verifyTOTP, generateBase32Secret } from "@/lib/totp";
 
-export async function loginUser(password: string) {
+export async function loginUser(password: string, totpCode?: string) {
   const expectedPassword = process.env.APP_PASSWORD || "admin123";
   const jwtSecret = process.env.JWT_SECRET || "tinyschedule-super-secret-key";
 
-  if (password === expectedPassword) {
-    const payload = {
-      authenticated: true,
-      exp: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
-    };
-    
-    const token = await signJWT(payload, jwtSecret);
-    
-    const cookieStore = await cookies();
-    cookieStore.set("auth_token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24, // 24 hours
-      path: "/"
-    });
-
-    return { success: true };
+  if (password !== expectedPassword) {
+    return { success: false, error: "Incorrect password" };
   }
+
+  // Get user to check if 2FA is enabled
+  const userId = await getDefaultUserId();
+  const user = await prisma.user.findUnique({
+    where: { id: userId }
+  });
+
+  if (user?.totpEnabled) {
+    if (!totpCode) {
+      return { success: true, totpRequired: true };
+    }
+    
+    // Verify TOTP code
+    const isTotpValid = await verifyTOTP(totpCode, user.totpSecret || "");
+    if (!isTotpValid) {
+      return { success: false, error: "Incorrect authenticator code" };
+    }
+  }
+
+  const payload = {
+    authenticated: true,
+    exp: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
+  };
   
-  return { success: false, error: "Incorrect password" };
+  const token = await signJWT(payload, jwtSecret);
+  
+  const cookieStore = await cookies();
+  cookieStore.set("auth_token", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 60 * 60 * 24, // 24 hours
+    path: "/"
+  });
+
+  return { success: true, totpRequired: false };
 }
 
 export async function logoutUser() {
@@ -551,5 +570,179 @@ export async function getWeeklyFixedCosts() {
   } catch (error) {
     console.error("Failed to fetch weekly fixed costs:", error);
     return { success: false, error: "Failed to fetch fixed costs" };
+  }
+}
+
+// ==========================================
+// 2FA / SECURITY ACTIONS
+// ==========================================
+
+export async function check2FAStatus() {
+  try {
+    const userId = await getDefaultUserId();
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { totpEnabled: true }
+    });
+    return { success: true, enabled: !!user?.totpEnabled };
+  } catch (error) {
+    console.error("Failed to check 2FA status:", error);
+    return { success: false, error: "Failed to check status" };
+  }
+}
+
+export async function generate2FASecret() {
+  try {
+    const secret = generateBase32Secret();
+    const otpauthUrl = `otpauth://totp/TinySchedule:best@tinyschedule.com?secret=${secret}&issuer=TinySchedule`;
+    return { success: true, secret, otpauthUrl };
+  } catch (error) {
+    console.error("Failed to generate 2FA secret:", error);
+    return { success: false, error: "Failed to generate secret" };
+  }
+}
+
+export async function enable2FA(secret: string, code: string) {
+  try {
+    const userId = await getDefaultUserId();
+    const isValid = await verifyTOTP(code, secret);
+    if (!isValid) {
+      return { success: false, error: "Invalid verification code" };
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        totpSecret: secret,
+        totpEnabled: true
+      }
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to enable 2FA:", error);
+    return { success: false, error: "Failed to enable 2FA" };
+  }
+}
+
+export async function disable2FA(code: string) {
+  try {
+    const userId = await getDefaultUserId();
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user || !user.totpEnabled) {
+      return { success: false, error: "2FA is not enabled" };
+    }
+
+    const isValid = await verifyTOTP(code, user.totpSecret || "");
+    if (!isValid) {
+      return { success: false, error: "Invalid verification code" };
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        totpSecret: null,
+        totpEnabled: false
+      }
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to disable 2FA:", error);
+    return { success: false, error: "Failed to disable 2FA" };
+  }
+}
+
+// ==========================================
+// JSON PORTABILITY ACTIONS
+// ==========================================
+
+export async function importTasksAction(tasks: any[]) {
+  try {
+    const userId = await getDefaultUserId();
+    const idMap: Record<string, string> = {};
+
+    // 1. First pass: Import tasks without a parent (root tasks)
+    const parentTasks = tasks.filter(t => !t.parentId);
+    for (const task of parentTasks) {
+      const created = await prisma.task.create({
+        data: {
+          userId,
+          title: task.title || "Untitled Task",
+          description: task.description || null,
+          status: task.status === "COMPLETED" ? "COMPLETED" : "TODO",
+          deadline: task.deadline ? new Date(task.deadline) : null,
+          tags: Array.isArray(task.tags) ? task.tags : [],
+          subtasks: Array.isArray(task.subtasks) ? task.subtasks.map((s: any, idx: number) => ({
+            id: s.id || `${Date.now()}-${idx}-${Math.random()}`,
+            title: s.title || "Subtask",
+            completed: !!s.completed
+          })) : []
+        }
+      });
+      if (task.id) {
+        idMap[task.id] = created.id;
+      }
+    }
+
+    // 2. Second pass: Import tasks that have a parent
+    const childTasks = tasks.filter(t => !!t.parentId);
+    for (const task of childTasks) {
+      const newParentId = idMap[task.parentId] || null;
+      await prisma.task.create({
+        data: {
+          userId,
+          title: task.title || "Untitled Task",
+          description: task.description || null,
+          status: task.status === "COMPLETED" ? "COMPLETED" : "TODO",
+          deadline: task.deadline ? new Date(task.deadline) : null,
+          tags: Array.isArray(task.tags) ? task.tags : [],
+          parentId: newParentId,
+          subtasks: Array.isArray(task.subtasks) ? task.subtasks.map((s: any, idx: number) => ({
+            id: s.id || `${Date.now()}-${idx}-${Math.random()}`,
+            title: s.title || "Subtask",
+            completed: !!s.completed
+          })) : []
+        }
+      });
+    }
+
+    revalidatePath("/");
+    revalidatePath("/tasks");
+    return { success: true, count: tasks.length };
+  } catch (error) {
+    console.error("Failed to import tasks:", error);
+    return { success: false, error: "Failed to import tasks" };
+  }
+}
+
+export async function importSchedulesAction(schedules: any[]) {
+  try {
+    const userId = await getDefaultUserId();
+    for (const s of schedules) {
+      await prisma.schedule.create({
+        data: {
+          userId,
+          title: s.title || "Untitled Block",
+          startTime: s.startTime ? new Date(s.startTime) : new Date(),
+          endTime: s.endTime ? new Date(s.endTime) : new Date(),
+          isRoutine: !!s.isRoutine,
+          routineDays: Array.isArray(s.routineDays) ? s.routineDays.map(Number) : [],
+          isAllDay: !!s.isAllDay,
+          cost: s.cost ? parseFloat(s.cost) : null,
+          isFixedCost: !!s.isFixedCost
+        }
+      });
+    }
+
+    revalidatePath("/");
+    revalidatePath("/schedule");
+    return { success: true, count: schedules.length };
+  } catch (error) {
+    console.error("Failed to import schedules:", error);
+    return { success: false, error: "Failed to import schedules" };
   }
 }

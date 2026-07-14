@@ -6,10 +6,12 @@ import { createTask } from '@/app/actions';
 
 export default function AddTaskModal({ 
   isOpen, 
-  onClose
+  onClose,
+  defaultDate
 }: { 
   isOpen: boolean; 
   onClose: () => void;
+  defaultDate?: string;
   existingTasks?: unknown[]; // kept for signature compatibility but unused
 }) {
   const [isPending, startTransition] = useTransition();
@@ -78,6 +80,7 @@ export default function AddTaskModal({
             <input 
               type="date"
               name="deadline" 
+              defaultValue={defaultDate}
               className="w-full max-w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl px-4 py-3 outline-none text-ink font-medium transition-colors box-border"
             />
           </div>

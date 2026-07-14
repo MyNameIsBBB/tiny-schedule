@@ -1,14 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useTransition } from 'react';
-import { 
-  Plus, CheckCircle2, Droplet, Clock, Play, Pause,
-  RotateCcw, AlertCircle, X, Sparkles, Wallet
-} from 'lucide-react';
+import { Plus, CheckCircle2 } from 'lucide-react';
 import TaskCard from '@/components/tasks/TaskCard';
 import TimeBlock from '@/components/schedule/TimeBlock';
 import AddTaskModal from '@/components/tasks/AddTaskModal';
-import { logWater, logQuickExpense } from '@/app/actions';
 
 interface TaskItem {
   id: string;
@@ -31,34 +27,12 @@ interface ScheduleItem {
   [key: string]: unknown;
 }
 
-interface ExpenseItem {
-  id: string;
-  amount: number;
-  category: string;
-  title: string;
-  date: Date | string;
-}
-
-interface ExpensePreset {
-  id: string;
-  name: string;
-  emoji: string;
-  amount: number;
-  category: string;
-}
-
 export default function DashboardClient({ 
   initialTasks, 
-  initialSchedules,
-  initialWaterMl = 0,
-  initialExpenses = [],
-  weeklyFixedCosts = []
+  initialSchedules
 }: { 
   initialTasks: TaskItem[]; 
   initialSchedules: ScheduleItem[];
-  initialWaterMl?: number;
-  initialExpenses?: ExpenseItem[];
-  weeklyFixedCosts?: ScheduleItem[];
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -77,90 +51,7 @@ export default function DashboardClient({
     updateGreeting();
   }, []);
 
-  // Hydration State
-  const [waterMl, setWaterMl] = useState(initialWaterMl);
-  const [waterGoal, setWaterGoal] = useState(2000);
-  const [waterLogAmount, setWaterLogAmount] = useState(250);
-  const [animateCup, setAnimateCup] = useState(false);
-
-  const waterPercent = Math.min(Math.round((waterMl / waterGoal) * 100), 100);
-
-  const handleAddWater = (amount = waterLogAmount) => {
-    setAnimateCup(true);
-    setTimeout(() => setAnimateCup(false), 800);
-    startTransition(async () => {
-      setWaterMl(prev => prev + amount);
-      await logWater(amount);
-    });
-  };
-
-  // Pomodoro Timer State
-  const [timerMinutes, setTimerMinutes] = useState(25);
-  const [timeLeft, setTimeLeft] = useState(25 * 60);
-  const [timerActive, setTimerActive] = useState(false);
-  const [showStretchModal, setShowStretchModal] = useState(false);
-
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    if (timerActive && timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft(prev => prev - 1);
-      }, 1000);
-    } else if (timeLeft === 0 && timerActive) {
-      setTimerActive(false);
-      setShowStretchModal(true);
-      setTimeLeft(timerMinutes * 60);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [timerActive, timeLeft, timerMinutes]);
-
-  const handleStartPause = () => setTimerActive(!timerActive);
-
-  const handleResetTimer = () => {
-    setTimerActive(false);
-    setTimeLeft(timerMinutes * 60);
-  };
-
-  // Expenses State
-  const [expenses, setExpenses] = useState<ExpenseItem[]>(initialExpenses);
-  const [customExpenseOpen, setCustomExpenseOpen] = useState(false);
-  const [customAmount, setCustomAmount] = useState("");
-  const [customTitle, setCustomTitle] = useState("");
-  const [customCategory, setCustomCategory] = useState("OTHER");
-
-  const [expensePresets, setExpensePresets] = useState<ExpensePreset[]>([
-    { id: '1', name: 'Coffee', emoji: '☕', amount: 60, category: 'COFFEE' },
-    { id: '2', name: 'Water', emoji: '🥤', amount: 10, category: 'WATER' },
-    { id: '3', name: 'Commute', emoji: '🚗', amount: 50, category: 'TRANSPORT' }
-  ]);
-
-  useEffect(() => {
-    // Load local settings
-    const storedGoal = localStorage.getItem('water_goal');
-    if (storedGoal) setWaterGoal(Number(storedGoal));
-    
-    const storedLog = localStorage.getItem('water_log_amount');
-    if (storedLog) setWaterLogAmount(Number(storedLog));
-
-    const storedFocus = localStorage.getItem('focus_default_minutes');
-    if (storedFocus) {
-      const mins = Number(storedFocus);
-      setTimerMinutes(mins);
-      setTimeLeft(mins * 60);
-    }
-
-    const storedPresets = localStorage.getItem('expense_presets');
-    if (storedPresets) {
-      try {
-        const parsed = JSON.parse(storedPresets);
-        setExpensePresets(parsed);
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
     // Load daily routines completion status and clean up old ones
     const todayKey = new Date().toLocaleDateString('en-CA');
     const completions: { [key: string]: boolean } = {};
@@ -179,34 +70,6 @@ export default function DashboardClient({
     setCompletedRoutines(completions);
     keysToRemove.forEach(k => localStorage.removeItem(k));
   }, []);
-
-  const handleLogExpense = (category: string, amount: number, title: string) => {
-    startTransition(async () => {
-      const tempId = Date.now().toString();
-      const newExp: ExpenseItem = { id: tempId, amount, category, title, date: new Date().toISOString() };
-      setExpenses(prev => [newExp, ...prev]);
-      await logQuickExpense(category, amount, title);
-    });
-  };
-
-  const handleLogCustomExpense = (e: React.FormEvent) => {
-    e.preventDefault();
-    const amt = parseFloat(customAmount);
-    if (!isNaN(amt) && customTitle.trim()) {
-      handleLogExpense(customCategory, amt, customTitle.trim());
-      setCustomAmount("");
-      setCustomTitle("");
-      setCustomCategory("OTHER");
-      setCustomExpenseOpen(false);
-    }
-  };
-
-  const openExpenseModal = (preset: ExpensePreset) => {
-    setCustomTitle(`${preset.name} ${preset.emoji}`);
-    setCustomAmount(String(preset.amount));
-    setCustomCategory(preset.category);
-    setCustomExpenseOpen(true);
-  };
 
   // Filter schedules to show only today's schedules (All day sorted to the top)
   const getTodaySchedules = () => {
@@ -271,7 +134,7 @@ export default function DashboardClient({
       if (startHour < 12) {
         periods.morning.push(r);
       } else if (startHour < 17) {
-         periods.afternoon.push(r);
+        periods.afternoon.push(r);
       } else {
         periods.evening.push(r);
       }
@@ -281,7 +144,6 @@ export default function DashboardClient({
   };
   
   const routinePeriods = getRoutinePeriods();
-
   const todaySchedules = getTodaySchedules();
 
   const calculateDuration = (start: string | Date, end: string | Date) => {
@@ -295,15 +157,6 @@ export default function DashboardClient({
     }
     return `${mins}m`;
   };
-
-  // Format Timer output
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const totalWeeklyFixedCosts = weeklyFixedCosts.reduce((sum, item) => sum + (item.cost || 0), 0);
 
   // Focus tasks sorting (nearest deadline first, then tasks without deadlines)
   const getSortedFocusTasks = () => {
@@ -520,251 +373,7 @@ export default function DashboardClient({
             </div>
           </section>
         </div>
-
-        {/* Row 2: Health & Wealth Widgets */}
-        <section className="border-t border-wheat-dark/20 pt-10">
-          <h2 className="text-2xl font-bold mb-6 text-ink flex items-center gap-2">
-            🌱 Health & Wealth Hub
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
-            
-            {/* Widget 1: Water Intake */}
-            <div className="bg-paper-dark border-2 border-wheat rounded-[2.5rem] p-6 lg:p-8 shadow-soft flex flex-col justify-between hover:shadow-md transition-shadow relative">
-              <div className="flex justify-between items-start mb-4 pr-6">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center shadow-sm">
-                    <Droplet size={20} className={animateCup ? "animate-bounce" : ""} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-ink">Hydration</h3>
-                    <p className="text-xs text-ink-light/75 font-semibold">Goal: {waterGoal}ml</p>
-                  </div>
-                </div>
-                <span className="text-lg font-extrabold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100 shadow-sm">{waterPercent}%</span>
-              </div>
-
-              <div className="my-6 flex justify-center">
-                <button 
-                  onClick={() => handleAddWater(waterLogAmount)}
-                  className="relative w-24 h-28 border-x-4 border-b-4 border-wheat-dark/40 rounded-b-2xl flex items-end justify-center overflow-hidden cursor-pointer group transition-transform active:scale-95"
-                >
-                  <div 
-                    className="absolute bottom-0 w-full bg-blue-400/80 transition-all duration-700 ease-out"
-                    style={{ height: `${waterPercent}%` }}
-                  />
-                  <span className="relative z-10 font-mono font-bold text-sm text-ink-light group-hover:text-blue-900 transition-colors mb-2">
-                    +{waterLogAmount}ml
-                  </span>
-                </button>
-              </div>
-
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-bold text-ink">{waterMl} ml logged</span>
-                <button 
-                  onClick={() => handleAddWater(waterLogAmount)}
-                  className="bg-wheat hover:bg-wheat-dark text-ink font-bold text-xs px-4 py-2 rounded-xl transition-colors cursor-pointer"
-                >
-                  Quick Log Glass 🥛
-                </button>
-              </div>
-            </div>
-
-            {/* Widget 2: Pomodoro Timer */}
-            <div className="bg-paper-dark border-2 border-wheat rounded-[2.5rem] p-6 lg:p-8 shadow-soft flex flex-col justify-between hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center shadow-sm">
-                    <Clock size={20} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-ink">Focus Pomodoro</h3>
-                    <p className="text-xs text-ink-light/75 font-semibold">Stretch Break Enabled</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Timer Visual */}
-              <div className="flex flex-col items-center justify-center flex-1 my-6 w-full">
-                <span className="font-mono text-5xl font-extrabold text-ink tracking-widest">{formatTime(timeLeft)}</span>
-                {timerActive ? (
-                  <span className="text-xs font-bold text-ink-light mt-2">{timerMinutes}m Session</span>
-                ) : (
-                  <div className="flex items-center gap-2 mt-2 bg-paper/60 px-3 py-1 rounded-full border border-wheat-dark/30 shadow-inner">
-                    <button 
-                      onClick={() => {
-                        const newMins = Math.max(1, timerMinutes - 5);
-                        setTimerMinutes(newMins);
-                        setTimeLeft(newMins * 60);
-                      }}
-                      className="w-5 h-5 bg-wheat hover:bg-wheat-dark text-ink rounded-full flex items-center justify-center text-xs font-black cursor-pointer transition-colors shadow-sm"
-                      title="Decrease 5m"
-                    >
-                      -
-                    </button>
-                    <input 
-                      type="number"
-                      min="1"
-                      max="180"
-                      value={timerMinutes}
-                      onChange={(e) => {
-                        const mins = Math.max(1, Math.min(180, parseInt(e.target.value) || 1));
-                        setTimerMinutes(mins);
-                        setTimeLeft(mins * 60);
-                      }}
-                      className="w-8 text-center text-xs font-black text-ink bg-transparent border-none outline-none font-mono focus:ring-0 p-0"
-                    />
-                    <span className="text-xs font-bold text-ink-light mr-0.5">m</span>
-                    <button 
-                      onClick={() => {
-                        const newMins = Math.min(180, timerMinutes + 5);
-                        setTimerMinutes(newMins);
-                        setTimeLeft(newMins * 60);
-                      }}
-                      className="w-5 h-5 bg-wheat hover:bg-wheat-dark text-ink rounded-full flex items-center justify-center text-xs font-black cursor-pointer transition-colors shadow-sm"
-                      title="Increase 5m"
-                    >
-                      +
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Controls */}
-              <div className="flex gap-3 justify-center w-full">
-                <button 
-                  onClick={handleStartPause}
-                  className={`flex-1 font-bold text-sm py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-sm
-                    ${timerActive ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200' : 'bg-highlight hover:bg-highlight-alt text-paper'}`}
-                >
-                  {timerActive ? <Pause size={16} /> : <Play size={16} />}
-                  {timerActive ? 'Pause' : 'Start'}
-                </button>
-                <button 
-                  onClick={handleResetTimer}
-                  className="bg-wheat hover:bg-wheat-dark text-ink p-2.5 rounded-xl transition-colors cursor-pointer shadow-sm shrink-0"
-                  title="Reset"
-                >
-                  <RotateCcw size={16} />
-                </button>
-              </div>
-            </div>
-
-            {/* Widget 3: Quick Expense & Fixed Cost Alerts */}
-            <div className="bg-paper-dark border-2 border-wheat rounded-[2.5rem] p-6 lg:p-8 shadow-soft flex flex-col justify-between hover:shadow-md transition-shadow relative">
-              <div className="flex justify-between items-start mb-4 pr-6">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 bg-green-50 text-green-500 rounded-2xl flex items-center justify-center shadow-sm">
-                    <Wallet size={20} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-ink">Daily Expenses</h3>
-                    <p className="text-xs text-ink-light/75 font-semibold">Quick Presets</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3 my-2 w-full box-border">
-                {/* Configurable Presets list */}
-                <div className="grid grid-cols-3 gap-2 w-full box-border">
-                  {expensePresets.map((preset) => (
-                    <button 
-                      key={preset.id}
-                      onClick={() => openExpenseModal(preset)}
-                      className="flex flex-col items-center justify-center bg-paper hover:bg-wheat p-2 rounded-2xl border border-wheat-dark/20 transition-all active:scale-95 cursor-pointer shadow-sm min-w-0 box-border"
-                    >
-                      <span className="text-base mb-0.5">{preset.emoji}</span>
-                      <span className="text-[9px] font-bold text-ink-light truncate w-full text-center">{preset.name}</span>
-                      <span className="text-xs font-extrabold text-ink mt-0.5">{preset.amount}฿</span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Fixed Cost Alerts Area */}
-                {totalWeeklyFixedCosts > 0 && (
-                  <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl flex items-center gap-2.5 w-full box-border">
-                    <AlertCircle size={20} className="text-amber-600 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-bold text-amber-800">Weekly Fixed Costs (ปลิวก้อนโต)</p>
-                      <p className="text-xs font-extrabold text-amber-950 truncate">💸 {totalWeeklyFixedCosts}฿ will fly away this week</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Custom logs toggler */}
-              <div className="flex gap-2 items-center mt-3 pt-3 border-t border-wheat/60 w-full box-border">
-                {customExpenseOpen ? (
-                  <form onSubmit={handleLogCustomExpense} className="flex gap-1.5 w-full box-border">
-                    <input 
-                      type="text" 
-                      placeholder="Item"
-                      required
-                      value={customTitle}
-                      onChange={(e) => setCustomTitle(e.target.value)}
-                      className="flex-1 min-w-0 text-xs bg-paper border border-wheat-dark/30 rounded-lg px-2 py-1.5 outline-none font-medium"
-                    />
-                    <input 
-                      type="number" 
-                      placeholder="฿"
-                      required
-                      value={customAmount}
-                      onChange={(e) => setCustomAmount(e.target.value)}
-                      className="w-12 text-xs bg-paper border border-wheat-dark/30 rounded-lg px-2 py-1.5 outline-none font-extrabold"
-                    />
-                    <button type="submit" className="bg-highlight hover:bg-highlight-alt text-paper px-2.5 rounded-lg text-xs font-bold cursor-pointer shrink-0">Log</button>
-                    <button type="button" onClick={() => setCustomExpenseOpen(false)} className="text-ink-light hover:text-ink p-1 shrink-0"><X size={14} /></button>
-                  </form>
-                ) : (
-                  <div className="flex justify-between items-center w-full">
-                    <span className="text-xs font-bold text-ink-light">
-                      Logged today: {expenses.reduce((s, e) => s + e.amount, 0)}฿
-                    </span>
-                    <button 
-                      onClick={() => {
-                        setCustomTitle("");
-                        setCustomAmount("");
-                        setCustomCategory("OTHER");
-                        setCustomExpenseOpen(true);
-                      }}
-                      className="text-xs font-extrabold text-highlight hover:underline cursor-pointer"
-                    >
-                      + Custom Item
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-          </div>
-        </section>
       </div>
-
-      {/* Stretch Reminder Modal Overlay */}
-      {showStretchModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/20 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-paper w-full max-w-sm rounded-[2.5rem] shadow-lg border-2 border-wheat-dark p-8 relative flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mb-6 shadow-soft">
-              <Sparkles size={32} />
-            </div>
-            
-            <h2 className="text-2xl font-black mb-2 text-ink">Time to Stretch! 🧘‍♂️</h2>
-            <p className="text-ink-light font-medium text-sm leading-relaxed mb-6">
-              Your focus block has finished. Stand up, rest your eyes, stretch your muscles, and take a quick glass of water! ✨
-            </p>
-            
-            <button 
-              onClick={() => {
-                setShowStretchModal(false);
-                handleAddWater(waterLogAmount); // Automatically log water glass
-              }}
-              className="bg-highlight hover:bg-highlight-alt text-paper font-bold text-base px-8 py-3.5 rounded-full shadow-soft transition-transform hover:scale-105 active:scale-95 cursor-pointer"
-            >
-              Done & Log Water 🥛
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Add Task Modal */}
       <AddTaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />

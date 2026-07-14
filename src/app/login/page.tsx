@@ -6,6 +6,8 @@ import { loginUser } from '../actions';
 
 export default function LoginPage() {
   const [password, setPassword] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const [totpRequired, setTotpRequired] = useState(false);
   const [error, setError] = useState('');
   const [isPending, startTransition] = useTransition();
 
@@ -14,11 +16,13 @@ export default function LoginPage() {
     setError('');
 
     startTransition(async () => {
-      const res = await loginUser(password);
+      const res = await loginUser(password, totpRequired ? totpCode : undefined);
       if (res.success) {
-        // Redirection is handled inside server action/middleware,
-        // but since next.js actions returning response can also let us reload/redirect:
-        window.location.href = '/';
+        if (res.totpRequired) {
+          setTotpRequired(true);
+        } else {
+          window.location.href = '/';
+        }
       } else {
         setError(res.error || 'Login failed');
       }
@@ -35,33 +39,71 @@ export default function LoginPage() {
 
         <h1 className="text-3xl font-extrabold text-ink mb-2 tracking-tight">TinySchedule</h1>
         <p className="text-ink-light text-center font-medium mb-8 max-w-xs text-sm">
-          Enter password to access your cozy daily planner.
+          {totpRequired 
+            ? "Enter the 6-digit authentication code from your authenticator app."
+            : "Enter password to access your cozy daily planner."}
         </p>
 
         <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
-          <div className="relative">
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password..."
-              required
-              autoFocus
-              className="w-full bg-paper border-2 border-wheat focus:border-highlight rounded-2xl px-5 py-4 pr-12 outline-none text-ink font-semibold placeholder:text-ink-light/40 transition-colors shadow-inner"
-            />
-            <button
-              type="submit"
-              disabled={isPending}
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-highlight hover:bg-highlight-alt text-paper rounded-xl flex items-center justify-center shadow-soft transition-transform active:scale-95 disabled:opacity-50 cursor-pointer"
-            >
-              <ArrowRight size={20} strokeWidth={2.5} />
-            </button>
-          </div>
+          {!totpRequired ? (
+            <div className="relative">
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password..."
+                required
+                autoFocus
+                className="w-full bg-paper border-2 border-wheat focus:border-highlight rounded-2xl px-5 py-4 pr-12 outline-none text-ink font-semibold placeholder:text-ink-light/40 transition-colors shadow-inner"
+              />
+              <button
+                type="submit"
+                disabled={isPending}
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-highlight hover:bg-highlight-alt text-paper rounded-xl flex items-center justify-center shadow-soft transition-transform active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                <ArrowRight size={20} strokeWidth={2.5} />
+              </button>
+            </div>
+          ) : (
+            <div className="relative">
+              <input
+                type="text"
+                maxLength={6}
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="000 000"
+                required
+                autoFocus
+                className="w-full bg-paper border-2 border-wheat focus:border-highlight rounded-2xl px-5 py-4 pr-12 outline-none text-ink font-extrabold text-center tracking-widest text-lg placeholder:text-ink-light/40 transition-colors shadow-inner"
+              />
+              <button
+                type="submit"
+                disabled={isPending}
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-highlight hover:bg-highlight-alt text-paper rounded-xl flex items-center justify-center shadow-soft transition-transform active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                <ArrowRight size={20} strokeWidth={2.5} />
+              </button>
+            </div>
+          )}
 
           {error && (
             <p className="text-red-500 text-sm font-bold text-center mt-1 animate-pulse">
               {error}
             </p>
+          )}
+
+          {totpRequired && (
+            <button 
+              type="button" 
+              onClick={() => {
+                setTotpRequired(false);
+                setTotpCode('');
+                setError('');
+              }}
+              className="text-xs text-ink-light hover:underline font-bold text-center mt-2 cursor-pointer"
+            >
+              Back to password
+            </button>
           )}
 
           <div className="text-center mt-6">

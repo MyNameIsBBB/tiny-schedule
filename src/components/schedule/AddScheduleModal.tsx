@@ -4,7 +4,15 @@ import React, { useState, useTransition } from 'react';
 import { X } from 'lucide-react';
 import { createSchedule } from '@/app/actions';
 
-export default function AddScheduleModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
+export default function AddScheduleModal({ 
+  isOpen, 
+  onClose,
+  defaultDate
+}: { 
+  isOpen: boolean; 
+  onClose: () => void;
+  defaultDate?: string;
+}) {
   const [isPending, startTransition] = useTransition();
   const [isAllDay, setIsAllDay] = useState(false);
   const [isRoutine, setIsRoutine] = useState(false);
@@ -19,7 +27,7 @@ export default function AddScheduleModal({ isOpen, onClose }: { isOpen: boolean,
     });
   }
 
-  const todayStr = new Date().toLocaleDateString('en-CA'); // Gets YYYY-MM-DD in local time
+  const todayStr = defaultDate || new Date().toLocaleDateString('en-CA'); // Gets YYYY-MM-DD in local time
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/20 backdrop-blur-sm">
