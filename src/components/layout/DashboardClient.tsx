@@ -5,6 +5,7 @@ import { Plus, ChevronLeft, ChevronRight, CalendarDays, CheckSquare, Circle, Che
 import TaskCard from '@/components/tasks/TaskCard';
 import AddTaskModal from '@/components/tasks/AddTaskModal';
 import AddScheduleModal from '@/components/schedule/AddScheduleModal';
+import EditScheduleModal from '@/components/schedule/EditScheduleModal';
 import { deleteSchedule, deleteTask, toggleTaskStatus } from '@/app/actions';
 
 interface TaskItem {
@@ -48,6 +49,7 @@ export default function DashboardClient({
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [isMobileAgendaOpen, setIsMobileAgendaOpen] = useState(false);
   const [completedRoutines, setCompletedRoutines] = useState<{ [key: string]: boolean }>({});
+  const [editingSchedule, setEditingSchedule] = useState<ScheduleItem | null>(null);
 
   // Greeting State
   const [greeting, setGreeting] = useState({ text: "Good morning, Best!", icon: "☀️" });
@@ -350,19 +352,31 @@ export default function DashboardClient({
                       <p className={`text-xs font-bold ${textTimeClass}`}>
                         🕒 {isAllDay ? "All Day Event" : `${startTimeStr} - ${endTimeStr}`}
                       </p>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm("Are you sure you want to delete this block?")) {
-                            startTransition(async () => {
-                              await deleteSchedule(schedule.id);
-                            });
-                          }
-                        }}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-xs text-red-500 hover:text-red-700 font-bold cursor-pointer"
-                      >
-                        Delete
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingSchedule(schedule);
+                            setIsMobileAgendaOpen(false);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-xs text-highlight hover:text-highlight-alt font-bold cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm("Are you sure you want to delete this block?")) {
+                              startTransition(async () => {
+                                await deleteSchedule(schedule.id);
+                              });
+                            }
+                          }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-xs text-red-500 hover:text-red-700 font-bold cursor-pointer"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -657,6 +671,11 @@ export default function DashboardClient({
         isOpen={isScheduleModalOpen} 
         onClose={() => setIsScheduleModalOpen(false)} 
         defaultDate={selectedDateStr}
+      />
+      <EditScheduleModal 
+        isOpen={!!editingSchedule} 
+        onClose={() => setEditingSchedule(null)} 
+        schedule={editingSchedule}
       />
     </>
   );

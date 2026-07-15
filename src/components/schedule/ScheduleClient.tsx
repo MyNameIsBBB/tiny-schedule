@@ -3,6 +3,7 @@
 import React, { useState, useTransition } from 'react';
 import { Plus, CalendarDays, ChevronLeft, ChevronRight, List, X } from 'lucide-react';
 import AddScheduleModal from './AddScheduleModal';
+import EditScheduleModal from './EditScheduleModal';
 import TimeBlock from './TimeBlock';
 import { importSchedulesAction } from '@/app/actions';
 import { addToast } from '@/lib/notifications';
@@ -27,6 +28,7 @@ export default function ScheduleClient({ initialSchedules }: { initialSchedules:
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [jsonInput, setJsonInput] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [editingSchedule, setEditingSchedule] = useState<ScheduleItem | null>(null);
 
   // Group schedules by Date for the List View
   const groupSchedulesByDate = () => {
@@ -252,6 +254,7 @@ export default function ScheduleClient({ initialSchedules }: { initialSchedules:
                             color={isFixed ? "bg-amber-100 border-2 border-amber-300 text-amber-900" : "bg-wheat text-ink"}
                             isFirst={index === 0}
                             isLast={index === items.length - 1}
+                            onEdit={() => setEditingSchedule(schedule)}
                           />
                         );
                       })}
@@ -280,6 +283,12 @@ export default function ScheduleClient({ initialSchedules }: { initialSchedules:
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
         defaultDate={selectedDate}
+      />
+
+      <EditScheduleModal 
+        isOpen={!!editingSchedule} 
+        onClose={() => setEditingSchedule(null)} 
+        schedule={editingSchedule}
       />
 
       {isImportModalOpen && (

@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useTransition } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Edit2 } from 'lucide-react';
 import { deleteSchedule } from '@/app/actions';
 
 export default function TimeBlock({ 
-  id, time, label, duration, color, active = false, isFirst = false, isLast = false 
+  id, time, label, duration, color, active = false, isFirst = false, isLast = false, onEdit
 }: { 
-  id?: string, time: string, label: string, duration: string, color: string, active?: boolean, isFirst?: boolean, isLast?: boolean 
+  id?: string, time: string, label: string, duration: string, color: string, active?: boolean, isFirst?: boolean, isLast?: boolean, onEdit?: () => void
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -19,6 +19,11 @@ export default function TimeBlock({
         await deleteSchedule(id);
       });
     }
+  };
+
+  const handleEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onEdit) onEdit();
   };
 
   return (
@@ -49,13 +54,26 @@ export default function TimeBlock({
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-xs font-bold px-3 py-1 bg-white/50 rounded-full text-ink-light">{duration}</span>
             {id && (
-              <button 
-                onClick={handleDelete}
-                disabled={isPending}
-                className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-ink-light hover:text-red-500 rounded-full hover:bg-white/40 cursor-pointer disabled:opacity-50"
-              >
-                <Trash2 size={16} />
-              </button>
+              <div className="flex items-center gap-1">
+                {onEdit && (
+                  <button 
+                    onClick={handleEdit}
+                    disabled={isPending}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-ink-light hover:text-highlight rounded-full hover:bg-white/40 cursor-pointer disabled:opacity-50"
+                    title="Edit block"
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                )}
+                <button 
+                  onClick={handleDelete}
+                  disabled={isPending}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-ink-light hover:text-red-500 rounded-full hover:bg-white/40 cursor-pointer disabled:opacity-50"
+                  title="Delete block"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
             )}
           </div>
         </div>

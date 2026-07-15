@@ -357,6 +357,55 @@ export async function createSchedule(formData: FormData) {
   }
 }
 
+export async function updateSchedule(scheduleId: string, formData: FormData) {
+  try {
+    const title = formData.get("title") as string;
+    
+    const startDateStr = formData.get("startDate") as string;
+    const endDateStr = formData.get("endDate") as string || startDateStr;
+    const isAllDay = formData.get("isAllDay") === "true" || formData.get("isAllDay") === "on";
+    const startTimeStr = isAllDay ? "00:00" : (formData.get("startTime") as string || "00:00");
+    const endTimeStr = isAllDay ? "23:59" : (formData.get("endTime") as string || "23:59");
+
+    const startTime = new Date(`${startDateStr}T${startTimeStr}:00`);
+    const endTime = new Date(`${endDateStr}T${endTimeStr}:00`);
+
+    const costStr = formData.get("cost") as string;
+    const cost = costStr ? parseFloat(costStr) : null;
+    const isFixedCost = formData.get("isFixedCost") === "true" || formData.get("isFixedCost") === "on";
+
+    const isRoutine = formData.get("isRoutine") === "true" || formData.get("isRoutine") === "on";
+    const routineType = (formData.get("routineType") as string) || "WEEKLY";
+    const routineDaysStr = formData.get("routineDays") as string;
+    const routineDays = routineDaysStr ? routineDaysStr.split(",").filter(s => s !== "").map(Number) : [];
+    const routineMonthStr = formData.get("routineMonth") as string;
+    const routineMonth = routineMonthStr ? parseInt(routineMonthStr) : null;
+
+    await prisma.schedule.update({
+      where: { id: scheduleId },
+      data: {
+        title,
+        startTime,
+        endTime,
+        cost,
+        isFixedCost,
+        isAllDay,
+        isRoutine,
+        routineType,
+        routineDays,
+        routineMonth
+      }
+    });
+
+    revalidatePath("/");
+    revalidatePath("/schedule");
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to update schedule:", error);
+    return { success: false, error: "Failed to update schedule" };
+  }
+}
+
 export async function deleteSchedule(scheduleId: string) {
   try {
     await prisma.schedule.delete({
