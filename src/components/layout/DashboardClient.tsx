@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useTransition } from 'react';
-import { Plus, ChevronLeft, ChevronRight, CalendarDays, CheckSquare, ListTodo, Circle, CheckCircle2 } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, CalendarDays, CheckSquare, Circle, CheckCircle2, X } from 'lucide-react';
 import TaskCard from '@/components/tasks/TaskCard';
-import TimeBlock from '@/components/schedule/TimeBlock';
 import AddTaskModal from '@/components/tasks/AddTaskModal';
 import AddScheduleModal from '@/components/schedule/AddScheduleModal';
+import { deleteSchedule, deleteTask, toggleTaskStatus } from '@/app/actions';
 
 interface TaskItem {
   id: string;
@@ -46,6 +46,7 @@ export default function DashboardClient({
   
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [isMobileAgendaOpen, setIsMobileAgendaOpen] = useState(false);
   const [completedRoutines, setCompletedRoutines] = useState<{ [key: string]: boolean }>({});
 
   // Greeting State
@@ -260,6 +261,210 @@ export default function DashboardClient({
     year: 'numeric' 
   });
 
+  // Reusable rendering function for the daily agenda contents
+  const renderAgendaListContent = () => {
+    return (
+      <div className="flex flex-col gap-6 w-full">
+        {/* Routines section */}
+        <div>
+          <h3 className="text-xs font-bold text-ink-light mb-3 px-1 flex items-center gap-1.5 uppercase tracking-wider">
+            🔄 Daily Routines ({selectedRoutines.length})
+          </h3>
+          <div className="flex flex-col gap-3">
+            {selectedRoutines.length > 0 ? (
+              selectedRoutines.map((routine) => {
+                const completed = !!completedRoutines[routine.id];
+                const timeStr = new Date(routine.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                const displayTitle = routine.cost 
+                  ? `${routine.title} (💸 ${routine.cost}฿)` 
+                  : routine.title;
+                
+                return (
+                  <div 
+                    key={routine.id} 
+                    onClick={() => handleToggleRoutine(routine.id)}
+                    className="flex items-center gap-3 bg-emerald-50/60 p-4 rounded-r-2xl rounded-l-md border border-emerald-100/50 border-l-4 border-l-emerald-500 shadow-soft transition-all hover:bg-emerald-100/40 cursor-pointer"
+                  >
+                    <span className="shrink-0 text-emerald-600">
+                      {completed ? (
+                        <CheckCircle2 size={20} className="text-emerald-600 fill-emerald-50" />
+                      ) : (
+                        <Circle size={20} strokeWidth={2.5} className="text-emerald-500" />
+                      )}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-bold text-sm leading-snug text-emerald-950 ${completed ? 'line-through opacity-60 font-medium' : ''}`}>
+                        {displayTitle}
+                      </p>
+                      <p className="text-[10px] text-emerald-700/80 font-bold mt-1">🕒 Time: {timeStr}</p>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="text-center py-6 text-xs text-ink-light font-bold bg-paper-dark/30 rounded-2xl border border-wheat-dark/15">
+                No routines for this day.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Schedules section */}
+        <div>
+          <h3 className="text-xs font-bold text-ink-light mb-3 px-1 flex items-center gap-1.5 uppercase tracking-wider">
+            📅 Schedule Blocks ({selectedSchedules.length})
+          </h3>
+          <div className="flex flex-col gap-3">
+            {selectedSchedules.length > 0 ? (
+              selectedSchedules.map((schedule) => {
+                const isAllDay = !!schedule.isAllDay;
+                const startTimeStr = isAllDay 
+                  ? "All Day" 
+                  : new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                const endTimeStr = isAllDay 
+                  ? "" 
+                  : new Date(schedule.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                const durationStr = isAllDay 
+                  ? "Full Day" 
+                  : calculateDuration(schedule.startTime, schedule.endTime);
+                
+                const displayTitle = schedule.cost 
+                  ? `${schedule.title} (💸 ${schedule.cost}฿)` 
+                  : schedule.title;
+
+                const isFixed = !!schedule.isFixedCost;
+                const bgClass = isFixed ? "bg-amber-50/80 border-amber-200 text-amber-950" : "bg-orange-50/80 border-orange-200 text-ink";
+                const borderLClass = isFixed ? "border-l-amber-500" : "border-l-highlight";
+                const textTimeClass = isFixed ? "text-amber-800/80" : "text-highlight/90";
+
+                return (
+                  <div 
+                    key={schedule.id}
+                    className={`group flex flex-col gap-1.5 p-4 rounded-r-2xl rounded-l-md border border-l-4 shadow-soft transition-all hover:translate-x-0.5 ${bgClass} ${borderLClass}`}
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <h4 className="font-bold text-sm sm:text-base leading-tight">{displayTitle}</h4>
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-white/60 rounded-full shrink-0">{durationStr}</span>
+                    </div>
+                    <div className="flex justify-between items-center mt-1">
+                      <p className={`text-xs font-bold ${textTimeClass}`}>
+                        🕒 {isAllDay ? "All Day Event" : `${startTimeStr} - ${endTimeStr}`}
+                      </p>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm("Are you sure you want to delete this block?")) {
+                            startTransition(async () => {
+                              await deleteSchedule(schedule.id);
+                            });
+                          }
+                        }}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-xs text-red-500 hover:text-red-700 font-bold cursor-pointer"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="text-center py-6 text-xs text-ink-light font-bold bg-paper-dark/30 rounded-2xl border border-wheat-dark/15">
+                No schedules for this day.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Tasks section */}
+        <div>
+          <h3 className="text-xs font-bold text-ink-light mb-3 px-1 flex items-center gap-1.5 uppercase tracking-wider">
+            🎯 Tasks Due ({selectedTasks.length})
+          </h3>
+          <div className="flex flex-col gap-3">
+            {selectedTasks.length > 0 ? (
+              selectedTasks.map((task) => {
+                const isCompleted = task.status === 'COMPLETED';
+                const startStr = task.startDate 
+                  ? new Date(task.startDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+                  : null;
+                const endStr = task.deadline 
+                  ? new Date(task.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+                  : null;
+                
+                const timeStr = startStr && endStr 
+                  ? `${startStr} - ${endStr}`
+                  : endStr 
+                  ? `Due by ${endStr}`
+                  : startStr
+                  ? `Starts ${startStr}`
+                  : "No date set";
+
+                return (
+                  <div 
+                    key={task.id}
+                    className="flex items-start gap-3 bg-sky-50/60 p-4 rounded-r-2xl rounded-l-md border border-sky-100/50 border-l-4 border-l-sky-500 shadow-soft transition-all hover:bg-sky-100/40"
+                  >
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startTransition(async () => {
+                          await toggleTaskStatus(task.id, task.status);
+                        });
+                      }}
+                      className="mt-1 shrink-0 text-sky-600 hover:scale-110 transition-transform cursor-pointer"
+                    >
+                      {isCompleted ? (
+                        <CheckCircle2 size={20} className="text-sky-600 fill-sky-50" />
+                      ) : (
+                        <Circle size={20} strokeWidth={2.5} className="text-sky-500" />
+                      )}
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-bold text-sm leading-snug text-sky-950 ${isCompleted ? 'line-through opacity-60 font-medium' : ''}`}>
+                        {task.title}
+                      </p>
+                      <p className="text-[10px] text-sky-700/80 font-bold mt-1">📅 Time: {timeStr}</p>
+                      
+                      {task.tags && task.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {task.tags.map((tag, i) => (
+                            <span key={i} className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-white/60 text-sky-800">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center gap-1 shrink-0 ml-1">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm("Are you sure you want to delete this task?")) {
+                            startTransition(async () => {
+                              await deleteTask(task.id);
+                            });
+                          }
+                        }}
+                        className="text-xs text-red-500 hover:text-red-700 font-bold cursor-pointer"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="text-center py-6 text-xs text-ink-light font-bold bg-paper-dark/30 rounded-2xl border border-wheat-dark/15">
+                No tasks due on this date.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
       <div className={`flex-1 p-4 lg:p-8 flex flex-col gap-6 max-w-[1600px] mx-auto w-full transition-opacity ${isPending ? 'opacity-85' : ''}`}>
@@ -322,7 +527,12 @@ export default function DashboardClient({
                 return (
                   <div 
                     key={idx}
-                    onClick={() => setSelectedDate(date)}
+                    onClick={() => {
+                      setSelectedDate(date);
+                      if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                        setIsMobileAgendaOpen(true);
+                      }
+                    }}
                     className={`aspect-square min-h-[48px] md:min-h-[75px] bg-paper hover:bg-wheat/10 border-2 rounded-2xl p-1.5 flex flex-col justify-between items-center transition-all cursor-pointer select-none group
                       ${isCurrentMonth ? 'border-wheat/40' : 'border-wheat/10 opacity-30'}
                       ${isSelected ? 'border-highlight shadow-sm bg-highlight/5' : 'hover:border-wheat-dark/30'}`}
@@ -351,8 +561,8 @@ export default function DashboardClient({
             </div>
           </section>
 
-          {/* RIGHT: Selected Day Agenda & Details */}
-          <aside className="w-full lg:w-96 xl:w-[420px] shrink-0 flex flex-col gap-6">
+          {/* RIGHT: Selected Day Agenda & Details (Shown only on Desktop/Tablet screen sizes) */}
+          <aside className="hidden lg:flex w-full lg:w-96 xl:w-[420px] shrink-0 flex-col gap-6">
             
             {/* Header / Greetings block */}
             <div className="bg-paper-dark rounded-[2rem] p-6 shadow-soft border border-wheat-dark/20 flex flex-col justify-between relative">
@@ -384,119 +594,58 @@ export default function DashboardClient({
 
             {/* Detail Lists */}
             <div className="flex flex-col gap-6 max-h-[60vh] lg:max-h-none lg:overflow-visible overflow-y-auto pr-1">
-              
-              {/* routines */}
-              <div>
-                <h3 className="text-sm font-bold text-ink-light mb-3 px-1 flex items-center gap-1.5 uppercase tracking-wider">
-                  🔄 Daily Routines ({selectedRoutines.length})
-                </h3>
-                <div className="bg-paper-dark rounded-[2rem] p-5 shadow-soft border border-wheat-dark/20 flex flex-col gap-3">
-                  {selectedRoutines.length > 0 ? (
-                    selectedRoutines.map((routine) => {
-                      const completed = !!completedRoutines[routine.id];
-                      const timeStr = new Date(routine.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                      const displayTitle = routine.cost 
-                        ? `${routine.title} (💸 ${routine.cost}฿)` 
-                        : routine.title;
-                      return (
-                        <div 
-                          key={routine.id} 
-                          onClick={() => handleToggleRoutine(routine.id)}
-                          className="flex items-center gap-3 bg-paper p-3.5 rounded-xl border border-wheat-dark/20 shadow-sm transition-all hover:bg-wheat/10 cursor-pointer"
-                        >
-                          <span className="shrink-0 text-highlight">
-                            {completed ? (
-                              <CheckCircle2 size={20} fill="currentColor" className="text-highlight fill-paper" />
-                            ) : (
-                              <Circle size={20} strokeWidth={2.5} />
-                            )}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <p className={`font-bold text-sm sm:text-base leading-snug ${completed ? 'line-through text-ink-light font-medium' : 'text-ink'}`}>
-                              {displayTitle}
-                            </p>
-                            <p className="text-xs text-ink-light font-medium mt-0.5">{timeStr}</p>
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="text-center py-6 text-xs text-ink-light font-bold">No routines for this day.</div>
-                  )}
-                </div>
-              </div>
-
-              {/* schedules */}
-              <div>
-                <h3 className="text-sm font-bold text-ink-light mb-3 px-1 flex items-center gap-1.5 uppercase tracking-wider">
-                  📅 Schedule Blocks ({selectedSchedules.length})
-                </h3>
-                <div className="bg-paper-dark rounded-[2rem] p-5 shadow-soft border border-wheat-dark/20 flex flex-col gap-5">
-                  {selectedSchedules.length > 0 ? (
-                    selectedSchedules.map((schedule: ScheduleItem, index: number) => {
-                      const isAllDay = !!schedule.isAllDay;
-                      const startTimeStr = isAllDay 
-                        ? "All Day" 
-                        : new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                      const durationStr = isAllDay 
-                        ? "Full Day" 
-                        : calculateDuration(schedule.startTime, schedule.endTime);
-                      
-                      const displayTitle = schedule.cost 
-                        ? `${schedule.title} (💸 ${schedule.cost}฿)` 
-                        : schedule.title;
-                      
-                      return (
-                        <TimeBlock 
-                          key={schedule.id}
-                          id={schedule.id}
-                          time={startTimeStr} 
-                          label={displayTitle} 
-                          duration={durationStr} 
-                          color={schedule.isFixedCost ? "bg-amber-100 border-2 border-amber-300 text-amber-900" : "bg-wheat text-ink"}
-                          isFirst={index === 0}
-                          isLast={index === selectedSchedules.length - 1}
-                        />
-                      );
-                    })
-                  ) : (
-                    <div className="text-center py-6 text-xs text-ink-light font-bold">No schedules for this day.</div>
-                  )}
-                </div>
-              </div>
-
-              {/* tasks */}
-              <div>
-                <h3 className="text-sm font-bold text-ink-light mb-3 px-1 flex items-center gap-1.5 uppercase tracking-wider">
-                  🎯 Tasks Due ({selectedTasks.length})
-                </h3>
-                <div className="flex flex-col gap-4">
-                  {selectedTasks.length > 0 ? (
-                    selectedTasks.map((task: TaskItem) => (
-                      <TaskCard 
-                        key={task.id}
-                        id={task.id}
-                        title={task.title} 
-                        tags={task.tags || []} 
-                        startDate={task.startDate}
-                        deadline={task.deadline}
-                        status={task.status}
-                        subtasks={task.subtasks}
-                      />
-                    ))
-                  ) : (
-                    <div className="bg-paper-dark rounded-[2rem] p-6 shadow-soft border border-wheat-dark/20 text-center text-xs text-ink-light font-bold">
-                      No tasks due on this date.
-                    </div>
-                  )}
-                </div>
-              </div>
-
+              {renderAgendaListContent()}
             </div>
           </aside>
 
         </div>
       </div>
+
+      {/* MOBILE AGENDA DETAIL MODAL */}
+      {isMobileAgendaOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-ink/30 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-paper w-full max-w-lg rounded-[2.5rem] shadow-xl border-2 border-wheat-dark p-6 relative max-h-[85vh] flex flex-col animate-in zoom-in-95 duration-200 box-border">
+            
+            {/* Close Button */}
+            <button 
+              onClick={() => setIsMobileAgendaOpen(false)} 
+              className="absolute top-6 right-6 text-ink-light hover:text-ink cursor-pointer p-1.5 rounded-full hover:bg-paper-dark transition-colors"
+            >
+              <X size={20} strokeWidth={2.5} />
+            </button>
+            
+            <h2 className="text-xl font-black text-ink mb-1 mt-2">Day Details</h2>
+            <p className="text-xs font-bold text-highlight mb-6">{formattedSelectedDateHeader}</p>
+            
+            {/* Scrollable Agenda List */}
+            <div className="flex-1 overflow-y-auto pr-1 flex flex-col gap-6">
+              {renderAgendaListContent()}
+            </div>
+            
+            {/* Quick Add buttons at bottom */}
+            <div className="flex gap-4 mt-6 pt-4 border-t border-wheat-dark/15">
+              <button 
+                onClick={() => {
+                  setIsScheduleModalOpen(true);
+                  setIsMobileAgendaOpen(false);
+                }}
+                className="flex-1 bg-highlight hover:bg-highlight-alt text-paper px-4 py-3.5 rounded-full flex items-center justify-center gap-1.5 font-bold shadow-soft transition-all hover:scale-103 active:scale-97 cursor-pointer text-sm"
+              >
+                <Plus size={16} strokeWidth={3} /> Add Block
+              </button>
+              <button 
+                onClick={() => {
+                  setIsTaskModalOpen(true);
+                  setIsMobileAgendaOpen(false);
+                }}
+                className="flex-1 bg-ink hover:bg-ink-light text-paper px-4 py-3.5 rounded-full flex items-center justify-center gap-1.5 font-bold shadow-soft transition-all hover:scale-103 active:scale-97 cursor-pointer text-sm"
+              >
+                <Plus size={16} strokeWidth={3} /> Add Task
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Modals */}
       <AddTaskModal 

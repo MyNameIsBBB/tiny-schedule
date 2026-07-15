@@ -18,10 +18,39 @@ interface TaskItem {
   [key: string]: unknown;
 }
 
+import { importTasksAction } from '@/app/actions';
+import { X } from 'lucide-react';
+
 export default function TasksClient({ initialTasks }: { initialTasks: TaskItem[] }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | undefined>(undefined);
   const [isPending, startTransition] = useTransition();
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [jsonInput, setJsonInput] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const handleImportSubmit = () => {
+    try {
+      const parsed = JSON.parse(jsonInput);
+      if (!parsed || !Array.isArray(parsed)) {
+        throw new Error("JSON must be an array of objects");
+      }
+      
+      startTransition(async () => {
+        const res = await importTasksAction(parsed);
+        if (res.success) {
+          addToast(`Successfully imported ${res.count} tasks!`);
+          setIsImportModalOpen(false);
+          setJsonInput("");
+          setErrorMsg("");
+        } else {
+          setErrorMsg(res.error || "Failed to import tasks");
+        }
+      });
+    } catch (e: any) {
+      setErrorMsg(`Invalid JSON: ${e.message}`);
+    }
+  };
 
   return (
     <>
@@ -33,6 +62,12 @@ export default function TasksClient({ initialTasks }: { initialTasks: TaskItem[]
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="bg-wheat hover:bg-wheat-dark text-ink px-5 py-3 rounded-full flex items-center gap-1.5 font-bold shadow-soft transition-all hover:scale-105 active:scale-95 cursor-pointer text-sm"
+            >
+              Import JSON
+            </button>
             <button 
               onClick={() => {
                 setSelectedDate(undefined);
@@ -81,6 +116,69 @@ export default function TasksClient({ initialTasks }: { initialTasks: TaskItem[]
         onClose={() => setIsModalOpen(false)} 
         defaultDate={selectedDate}
       />
+
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/20 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-paper w-full max-w-md rounded-[2.5rem] shadow-lg border-2 border-wheat-dark p-6 relative max-h-[90vh] flex flex-col box-border animate-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => { 
+                setIsImportModalOpen(false); 
+                setErrorMsg(""); 
+                setJsonInput(""); 
+              }} 
+              className="absolute top-6 right-6 text-ink-light hover:text-ink cursor-pointer p-1.5 rounded-full hover:bg-paper-dark transition-colors"
+            >
+              <X size={20} />
+            </button>
+            <h2 className="text-2xl font-bold mb-2 text-ink">Import Tasks (JSON)</h2>
+            <p className="text-xs text-ink-light font-semibold mb-4">Paste a JSON array of tasks to import them in bulk.</p>
+            
+            <button
+              onClick={() => setJsonInput(JSON.stringify([
+                {
+                  "title": "Design Landing Page Mockup",
+                  "status": "TODO",
+                  "startDate": "2026-07-15",
+                  "deadline": "2026-07-20",
+                  "tags": ["Design", "Urgent"],
+                  "subtasks": [
+                    { "title": "Research styles", "completed": true },
+                    { "title": "Sketch wireframe", "completed": false }
+                  ]
+                },
+                {
+                  "title": "Refactor API Controllers",
+                  "status": "IN_PROGRESS",
+                  "tags": ["Backend"]
+                }
+              ], null, 2))}
+              type="button"
+              className="text-xs text-highlight hover:text-highlight-alt font-black mb-3 cursor-pointer self-start ml-2 bg-wheat/30 px-3 py-1.5 rounded-xl border border-wheat transition-colors"
+            >
+              💡 Load Example Template
+            </button>
+
+            <textarea
+              className="flex-1 w-full bg-paper-dark border-2 border-wheat focus:border-highlight rounded-2xl p-4 outline-none text-ink font-mono text-[10px] placeholder:text-ink-light/50 transition-colors min-h-[250px] resize-none box-border"
+              placeholder={`[\n  {\n    "title": "Clean codebase",\n    "status": "TODO",\n    "tags": ["Urgent"],\n    "subtasks": [\n      { "title": "Check types", "completed": false }\n    ]\n  }\n]`}
+              value={jsonInput}
+              onChange={(e) => setJsonInput(e.target.value)}
+            />
+            
+            {errorMsg && (
+              <p className="text-xs text-red-500 font-bold mt-2 ml-2">{errorMsg}</p>
+            )}
+            
+            <button
+              onClick={handleImportSubmit}
+              disabled={isPending || !jsonInput.trim()}
+              className="mt-6 w-full bg-highlight hover:bg-highlight-alt text-paper font-bold text-base py-3.5 rounded-full shadow-soft transition-transform hover:-translate-y-1 active:scale-95 disabled:opacity-50 cursor-pointer box-border"
+            >
+              {isPending ? "Importing..." : "Import JSON"}
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
