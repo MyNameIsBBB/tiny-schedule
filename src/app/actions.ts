@@ -326,8 +326,11 @@ export async function createSchedule(formData: FormData) {
     const isFixedCost = formData.get("isFixedCost") === "true" || formData.get("isFixedCost") === "on";
 
     const isRoutine = formData.get("isRoutine") === "true" || formData.get("isRoutine") === "on";
+    const routineType = (formData.get("routineType") as string) || "WEEKLY";
     const routineDaysStr = formData.get("routineDays") as string;
-    const routineDays = routineDaysStr ? routineDaysStr.split(",").map(Number) : [];
+    const routineDays = routineDaysStr ? routineDaysStr.split(",").filter(s => s !== "").map(Number) : [];
+    const routineMonthStr = formData.get("routineMonth") as string;
+    const routineMonth = routineMonthStr ? parseInt(routineMonthStr) : null;
 
     await prisma.schedule.create({
       data: {
@@ -339,7 +342,9 @@ export async function createSchedule(formData: FormData) {
         isFixedCost,
         isAllDay,
         isRoutine,
-        routineDays
+        routineType,
+        routineDays,
+        routineMonth
       }
     });
 
@@ -739,7 +744,9 @@ export async function importSchedulesAction(schedules: any[]) {
           startTime: s.startTime ? new Date(s.startTime) : new Date(),
           endTime: s.endTime ? new Date(s.endTime) : new Date(),
           isRoutine: !!s.isRoutine,
+          routineType: s.routineType || "WEEKLY",
           routineDays: Array.isArray(s.routineDays) ? s.routineDays.map(Number) : [],
+          routineMonth: s.routineMonth ? parseInt(s.routineMonth) : null,
           isAllDay: !!s.isAllDay,
           cost: s.cost ? parseFloat(s.cost) : null,
           isFixedCost: !!s.isFixedCost

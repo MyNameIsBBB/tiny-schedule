@@ -18,7 +18,9 @@ export async function PATCH(
     if (body.cost !== undefined) updateData.cost = body.cost;
     if (body.isFixedCost !== undefined) updateData.isFixedCost = body.isFixedCost;
     if (body.isRoutine !== undefined) updateData.isRoutine = body.isRoutine;
+    if (body.routineType !== undefined) updateData.routineType = body.routineType;
     if (body.routineDays !== undefined) updateData.routineDays = body.routineDays;
+    if (body.routineMonth !== undefined) updateData.routineMonth = body.routineMonth;
 
     const schedule = await prisma.schedule.update({
       where: { id },
