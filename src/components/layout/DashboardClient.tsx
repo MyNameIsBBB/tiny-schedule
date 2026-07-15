@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useTransition } from 'react';
-import { Plus, ChevronLeft, ChevronRight, CalendarDays, CheckSquare, Circle, CheckCircle2, X } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, CalendarDays, CheckSquare, Circle, CheckCircle2, LayoutGrid, X } from 'lucide-react';
 import TaskCard from '@/components/tasks/TaskCard';
 import AddTaskModal from '@/components/tasks/AddTaskModal';
 import AddScheduleModal from '@/components/schedule/AddScheduleModal';
@@ -51,6 +51,10 @@ export default function DashboardClient({
   const [completedRoutines, setCompletedRoutines] = useState<{ [key: string]: boolean }>({});
   const [editingSchedule, setEditingSchedule] = useState<ScheduleItem | null>(null);
 
+  // Timeline states
+  const [viewMode, setViewMode] = useState<'month' | 'timeline'>('month');
+  const [timelinePivot, setTimelinePivot] = useState<Date>(new Date());
+
   // Greeting State
   const [greeting, setGreeting] = useState({ text: "Good morning, Best!", icon: "☀️" });
   useEffect(() => {
@@ -99,6 +103,57 @@ export default function DashboardClient({
     } else {
       localStorage.removeItem(key);
     }
+  };
+
+  // Timeline Helpers
+  const getMidnightDate = (dateVal: Date | string) => {
+    const d = new Date(dateVal);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  };
+
+  const getTimelineWeekDates = (pivot: Date) => {
+    const today = new Date(pivot);
+    const currentDay = today.getDay();
+    const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + distanceToMonday);
+    
+    const weekDates: Date[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      weekDates.push(d);
+    }
+    return weekDates;
+  };
+
+  const routineOccursOnDate = (routine: ScheduleItem, date: Date) => {
+    const dayOfWeek = date.getDay(); // 0: Sun, 1: Mon...
+    const dateOfMonth = date.getDate();
+    const monthOfYear = date.getMonth() + 1;
+    const year = date.getFullYear();
+    const days = Array.isArray(routine.routineDays) ? routine.routineDays : [];
+    const routineType = (routine.routineType as string) || "WEEKLY";
+
+    if (routineType === "WEEKLY") {
+      return days.includes(dayOfWeek);
+    } else if (routineType === "MONTHLY") {
+      if (days.length === 0) return false;
+      const targetDay = days[0];
+      const daysInMonth = new Date(year, date.getMonth() + 1, 0).getDate();
+      const actualDay = Math.min(targetDay, daysInMonth);
+      return dateOfMonth === actualDay;
+    } else if (routineType === "YEARLY") {
+      if (days.length === 0) return false;
+      const targetDay = days[0];
+      const targetMonth = routine.routineMonth as number || 1;
+      if (monthOfYear !== targetMonth) return false;
+      
+      const daysInMonth = new Date(year, targetMonth, 0).getDate();
+      const actualDay = Math.min(targetDay, daysInMonth);
+      return dateOfMonth === actualDay;
+    }
+    return false;
   };
 
   // Calendar Helpers
@@ -479,6 +534,91 @@ export default function DashboardClient({
     );
   };
 
+  // Timeline calculations for Dashboard
+  const dbWeekDates = getTimelineWeekDates(timelinePivot);
+  const dbStartOfWeek = getMidnightDate(dbWeekDates[0]);
+  const dbEndOfWeek = getMidnightDate(dbWeekDates[6]);
+  const dbTodayStr = new Date().toLocaleDateString('en-CA');
+
+  // Filter schedules active this week
+  const dbTimelineSchedules = initialSchedules.filter(s => {
+    if (s.isRoutine) return false;
+    const sStart = getMidnightDate(s.startTime);
+    const sEnd = getMidnightDate(s.endTime);
+    return sStart <= dbEndOfWeek && sEnd >= dbStartOfWeek;
+  });
+
+  const dbTimelineRoutines = initialSchedules.filter(s => !!s.isRoutine);
+
+  // Filter tasks active this week
+  const dbTimelineTasks = initialTasks.filter(t => {
+    const start = t.startDate ? getMidnightDate(t.startDate) : (t.deadline ? getMidnightDate(t.deadline) : null);
+    const end = t.deadline ? getMidnightDate(t.deadline) : (t.startDate ? getMidnightDate(t.startDate) : null);
+    if (!start || !end) return false;
+    return start <= dbEndOfWeek && end >= dbStartOfWeek;
+  });
+
+  const getDbGridSpan = (startTime: Date | string, endTime: Date | string) => {
+    const start = getMidnightDate(startTime);
+    const end = getMidnightDate(endTime);
+
+    // Find start index (0 to 6)
+    let startIdx = 0;
+    if (start >= dbStartOfWeek) {
+      startIdx = dbWeekDates.findIndex(d => getMidnightDate(d).getTime() === start.getTime());
+    }
+
+    // Find end index (0 to 6)
+    let endIdx = 6;
+    if (end <= dbEndOfWeek) {
+      endIdx = dbWeekDates.findIndex(d => getMidnightDate(d).getTime() === end.getTime());
+    }
+
+    if (startIdx === -1) startIdx = 0;
+    if (endIdx === -1) endIdx = 6;
+
+    return {
+      startCol: startIdx + 3,
+      endCol: endIdx + 4,
+      isContinuedStart: start < dbStartOfWeek,
+      isContinuedEnd: end > dbEndOfWeek
+    };
+  };
+
+  const getDbTaskGridSpan = (startDate: Date | string | null | undefined, deadline: Date | string | null | undefined) => {
+    const start = startDate ? getMidnightDate(startDate) : (deadline ? getMidnightDate(deadline) : null);
+    const end = deadline ? getMidnightDate(deadline) : (startDate ? getMidnightDate(startDate) : null);
+    if (!start || !end) return null;
+
+    // Find start index (0 to 6)
+    let startIdx = 0;
+    if (start >= dbStartOfWeek) {
+      startIdx = dbWeekDates.findIndex(d => getMidnightDate(d).getTime() === start.getTime());
+    }
+
+    // Find end index (0 to 6)
+    let endIdx = 6;
+    if (end <= dbEndOfWeek) {
+      endIdx = dbWeekDates.findIndex(d => getMidnightDate(d).getTime() === end.getTime());
+    }
+
+    if (startIdx === -1) startIdx = 0;
+    if (endIdx === -1) endIdx = 6;
+
+    return {
+      startCol: startIdx + 3,
+      endCol: endIdx + 4,
+      isContinuedStart: start < dbStartOfWeek,
+      isContinuedEnd: end > dbEndOfWeek
+    };
+  };
+
+  const getDbTimelineWeekLabel = () => {
+    const start = dbWeekDates[0];
+    const end = dbWeekDates[6];
+    return `${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  };
+
   return (
     <>
       <div className={`flex-1 p-4 lg:p-8 flex flex-col gap-6 max-w-[1600px] mx-auto w-full transition-opacity ${isPending ? 'opacity-85' : ''}`}>
@@ -491,88 +631,337 @@ export default function DashboardClient({
             
             {/* Calendar Header Controls */}
             <div className="flex justify-between items-center bg-paper px-4 py-3 rounded-2xl border border-wheat/60 shadow-sm mb-6 shrink-0">
-              <h2 className="text-lg font-extrabold text-ink">{monthName}</h2>
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={prevMonth}
-                  className="p-2 hover:bg-paper-dark text-ink rounded-xl border border-wheat cursor-pointer transition-colors"
-                  title="Previous Month"
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                <button 
-                  onClick={() => {
-                    const today = new Date();
-                    setCurrentDate(today);
-                    setSelectedDate(today);
-                  }}
-                  className="px-3 py-2 bg-wheat hover:bg-wheat-dark text-ink font-bold text-xs rounded-xl cursor-pointer transition-colors"
-                >
-                  Today
-                </button>
-                <button 
-                  onClick={nextMonth}
-                  className="p-2 hover:bg-paper-dark text-ink rounded-xl border border-wheat cursor-pointer transition-colors"
-                  title="Next Month"
-                >
-                  <ChevronRight size={16} />
-                </button>
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-extrabold text-ink">{viewMode === 'month' ? monthName : "Weekly Timeline"}</h2>
+                
+                {/* View Switcher Toggle */}
+                <div className="flex bg-wheat/30 p-0.5 rounded-xl border border-wheat-dark/20 ml-2">
+                  <button
+                    onClick={() => setViewMode('month')}
+                    type="button"
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer
+                      ${viewMode === 'month' ? 'bg-paper text-ink shadow-soft' : 'text-ink-light hover:text-ink'}`}
+                  >
+                    Month
+                  </button>
+                  <button
+                    onClick={() => {
+                      setViewMode('timeline');
+                      setTimelinePivot(selectedDate);
+                    }}
+                    type="button"
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer
+                      ${viewMode === 'timeline' ? 'bg-paper text-ink shadow-soft' : 'text-ink-light hover:text-ink'}`}
+                  >
+                    Timeline
+                  </button>
+                </div>
               </div>
+
+              {viewMode === 'month' && (
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={prevMonth}
+                    className="p-2 hover:bg-paper-dark text-ink rounded-xl border border-wheat cursor-pointer transition-colors"
+                    title="Previous Month"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const today = new Date();
+                      setCurrentDate(today);
+                      setSelectedDate(today);
+                      setTimelinePivot(today);
+                    }}
+                    className="px-3 py-2 bg-wheat hover:bg-wheat-dark text-ink font-bold text-xs rounded-xl cursor-pointer transition-colors"
+                  >
+                    Today
+                  </button>
+                  <button 
+                    onClick={nextMonth}
+                    className="p-2 hover:bg-paper-dark text-ink rounded-xl border border-wheat cursor-pointer transition-colors"
+                    title="Next Month"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Apple Calendar Month Grid */}
-            <div className="grid grid-cols-7 gap-1 md:gap-1.5 flex-1 min-w-0">
-              {weekDays.map(d => (
-                <div key={d} className="text-center font-extrabold text-[10px] sm:text-xs text-ink-light uppercase py-1 tracking-wider">
-                  {d}
-                </div>
-              ))}
-
-              {calendarDays.map(({ date, isCurrentMonth }, idx) => {
-                const cellDateKey = date.toLocaleDateString('en-CA');
-                const isToday = cellDateKey === todayStr;
-                const isSelected = cellDateKey === selectedDateStr;
-                
-                // Fetch counts to render minimal Apple-style dots
-                const hasSchedules = getSchedulesForDate(date).length > 0;
-                const hasRoutines = getRoutinesForDate(date).length > 0;
-                const hasTasks = getTasksForDate(date).length > 0;
-                
-                return (
-                  <div 
-                    key={idx}
-                    onClick={() => {
-                      setSelectedDate(date);
-                      if (typeof window !== 'undefined' && window.innerWidth < 1024) {
-                        setIsMobileAgendaOpen(true);
-                      }
-                    }}
-                    className={`aspect-square min-h-[48px] md:min-h-[75px] bg-paper hover:bg-wheat/10 border-2 rounded-2xl p-1.5 flex flex-col justify-between items-center transition-all cursor-pointer select-none group
-                      ${isCurrentMonth ? 'border-wheat/40' : 'border-wheat/10 opacity-30'}
-                      ${isSelected ? 'border-highlight shadow-sm bg-highlight/5' : 'hover:border-wheat-dark/30'}`}
-                  >
-                    {/* Day Number inside clean circle */}
-                    <span className={`w-6 h-6 md:w-8 md:h-8 flex items-center justify-center text-xs md:text-sm font-black rounded-full transition-colors
-                      ${isToday ? 'bg-highlight text-paper shadow-sm' : isSelected ? 'bg-ink text-paper' : 'text-ink'}`}>
-                      {date.getDate()}
-                    </span>
-
-                    {/* Apple Calendar Dots */}
-                    <div className="flex gap-1 justify-center items-center h-2 overflow-hidden mb-1">
-                      {hasSchedules && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-highlight shrink-0" title="Schedules" />
-                      )}
-                      {hasRoutines && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" title="Routines" />
-                      )}
-                      {hasTasks && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" title="Tasks" />
-                      )}
-                    </div>
+            {viewMode === 'month' && (
+              <div className="grid grid-cols-7 gap-1 md:gap-1.5 flex-1 min-w-0">
+                {weekDays.map(d => (
+                  <div key={d} className="text-center font-extrabold text-[10px] sm:text-xs text-ink-light uppercase py-1 tracking-wider">
+                    {d}
                   </div>
-                );
-              })}
-            </div>
+                ))}
+
+                {calendarDays.map(({ date, isCurrentMonth }, idx) => {
+                  const cellDateKey = date.toLocaleDateString('en-CA');
+                  const isToday = cellDateKey === todayStr;
+                  const isSelected = cellDateKey === selectedDateStr;
+                  
+                  // Fetch counts to render minimal Apple-style dots
+                  const hasSchedules = getSchedulesForDate(date).length > 0;
+                  const hasRoutines = getRoutinesForDate(date).length > 0;
+                  const hasTasks = getTasksForDate(date).length > 0;
+                  
+                  return (
+                    <div 
+                      key={idx}
+                      onClick={() => {
+                        setSelectedDate(date);
+                        setTimelinePivot(date);
+                        if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                          setIsMobileAgendaOpen(true);
+                        }
+                      }}
+                      className={`aspect-square min-h-[48px] md:min-h-[75px] bg-paper hover:bg-wheat/10 border-2 rounded-2xl p-1.5 flex flex-col justify-between items-center transition-all cursor-pointer select-none group
+                        ${isCurrentMonth ? 'border-wheat/40' : 'border-wheat/10 opacity-30'}
+                        ${isSelected ? 'border-highlight shadow-sm bg-highlight/5' : 'hover:border-wheat-dark/30'}`}
+                    >
+                      {/* Day Number inside clean circle */}
+                      <span className={`w-6 h-6 md:w-8 md:h-8 flex items-center justify-center text-xs md:text-sm font-black rounded-full transition-colors
+                        ${isToday ? 'bg-highlight text-paper shadow-sm' : isSelected ? 'bg-ink text-paper' : 'text-ink'}`}>
+                        {date.getDate()}
+                      </span>
+
+                      {/* Apple Calendar Dots */}
+                      <div className="flex gap-1 justify-center items-center h-2 overflow-hidden mb-1">
+                        {hasSchedules && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-highlight shrink-0" title="Schedules" />
+                        )}
+                        {hasRoutines && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" title="Routines" />
+                        )}
+                        {hasTasks && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" title="Tasks" />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Timeline View */}
+            {viewMode === 'timeline' && (
+              <div className="flex flex-col gap-6 flex-1 min-h-0">
+                {/* Week Selector / Header info */}
+                <div className="flex justify-between items-center bg-paper px-4 py-3 rounded-2xl border border-wheat/60 shadow-sm shrink-0">
+                  <h2 className="text-xs sm:text-sm font-extrabold text-ink">{getDbTimelineWeekLabel()}</h2>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setTimelinePivot(new Date(timelinePivot.getFullYear(), timelinePivot.getMonth(), timelinePivot.getDate() - 7))}
+                      className="p-1 hover:bg-paper-dark text-ink rounded-lg border border-wheat cursor-pointer transition-colors"
+                      title="Previous Week"
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    <button
+                      onClick={() => {
+                        const today = new Date();
+                        setTimelinePivot(today);
+                        setSelectedDate(today);
+                      }}
+                      className="px-2 py-1 bg-wheat hover:bg-wheat-dark text-ink font-bold text-[9px] rounded-lg cursor-pointer transition-colors"
+                    >
+                      This Week
+                    </button>
+                    <button
+                      onClick={() => setTimelinePivot(new Date(timelinePivot.getFullYear(), timelinePivot.getMonth(), timelinePivot.getDate() + 7))}
+                      className="p-1 hover:bg-paper-dark text-ink rounded-lg border border-wheat cursor-pointer transition-colors"
+                      title="Next Week"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Grid */}
+                <div className="bg-paper rounded-[2.5rem] p-4 lg:p-6 shadow-soft border border-wheat-dark/20 overflow-x-auto flex-1">
+                  <div className="min-w-[800px] flex flex-col gap-4">
+                    {/* Header Columns */}
+                    <div className="grid grid-cols-9 gap-2 border-b border-wheat-dark/20 pb-3 mb-1">
+                      <div className="col-span-2 font-bold text-ink-light text-[10px] uppercase tracking-wider pl-1 self-end">Item details</div>
+                      {dbWeekDates.map((d, idx) => {
+                        const dateStr = d.toLocaleDateString('en-CA');
+                        const isToday = dateStr === new Date().toLocaleDateString('en-CA');
+                        const isSelected = dateStr === selectedDate.toLocaleDateString('en-CA');
+                        return (
+                          <div 
+                            key={idx} 
+                            onClick={() => {
+                              setSelectedDate(d);
+                              if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                                setIsMobileAgendaOpen(true);
+                              }
+                            }}
+                            className={`col-span-1 text-center flex flex-col items-center cursor-pointer p-1 rounded-xl transition-all
+                              ${isSelected ? 'bg-highlight/5 border border-highlight/20' : 'hover:bg-wheat/20'}`}
+                          >
+                            <span className="text-[9px] uppercase font-black text-ink-light tracking-wide">{d.toLocaleDateString(undefined, { weekday: 'short' })}</span>
+                            <span className={`w-6 h-6 flex items-center justify-center text-xs font-black rounded-full mt-1 transition-colors
+                              ${isToday ? 'bg-highlight text-paper shadow-sm' : 'text-ink'}`}>
+                              {d.getDate()}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Timeline Data */}
+                    {dbTimelineSchedules.length === 0 && dbTimelineTasks.length === 0 && dbTimelineRoutines.filter(r => dbWeekDates.some(d => routineOccursOnDate(r, d))).length === 0 ? (
+                      <div className="text-center py-16 text-ink-light font-bold text-xs bg-paper-dark/30 rounded-3xl border-2 border-dashed border-wheat-dark/20">
+                        No active schedules or tasks for this week.
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-6">
+                        {/* Tasks Section */}
+                        {dbTimelineTasks.length > 0 && (
+                          <div className="flex flex-col gap-2.5">
+                            <h3 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest pl-1">🎯 Tasks</h3>
+                            <div className="flex flex-col gap-2">
+                              {dbTimelineTasks.map((task) => {
+                                const span = getDbTaskGridSpan(task.startDate, task.deadline);
+                                if (!span) return null;
+
+                                const isCompleted = task.status === 'COMPLETED';
+                                const bgClass = isCompleted 
+                                  ? "bg-slate-100/50 border-slate-200 text-slate-400 line-through" 
+                                  : "bg-sky-50 hover:bg-sky-100/70 border-sky-200 text-sky-950";
+
+                                return (
+                                  <div key={task.id} className="grid grid-cols-9 gap-2 items-center py-1 hover:bg-wheat/10 rounded-xl transition-colors">
+                                    <div className="col-span-2 pl-1 pr-3 min-w-0">
+                                      <h4 className={`font-bold text-[11px] text-ink truncate ${isCompleted ? 'line-through opacity-50' : ''}`} title={task.title}>{task.title}</h4>
+                                      <p className="text-[8px] text-ink-light font-bold mt-0.5 uppercase tracking-wide">
+                                        {task.status}
+                                      </p>
+                                    </div>
+                                    
+                                    {/* Spanning Bar */}
+                                    <div 
+                                      style={{ 
+                                        gridColumnStart: span.startCol, 
+                                        gridColumnEnd: span.endCol 
+                                      }}
+                                      onClick={() => {
+                                        setSelectedDate(task.deadline ? new Date(task.deadline) : (task.startDate ? new Date(task.startDate) : new Date()));
+                                      }}
+                                      className={`col-span-1 rounded-xl p-1.5 border shadow-soft cursor-pointer transition-all flex flex-col justify-center items-center text-center relative min-h-[38px] select-none
+                                        ${bgClass}
+                                        ${span.isContinuedStart ? 'rounded-l-none border-l-dashed border-l-2' : ''}
+                                        ${span.isContinuedEnd ? 'rounded-r-none border-r-dashed border-r-2' : ''}`}
+                                    >
+                                      <span className="font-extrabold text-[9px] sm:text-[10px] leading-tight truncate w-full px-1">{task.title}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Schedules Section */}
+                        {(dbTimelineSchedules.length > 0 || dbTimelineRoutines.filter(r => dbWeekDates.some(d => routineOccursOnDate(r, d))).length > 0) && (
+                          <div className="flex flex-col gap-2.5 border-t border-wheat-dark/15 pt-4">
+                            <h3 className="text-[10px] font-black text-highlight uppercase tracking-widest pl-1">📅 Schedules</h3>
+                            <div className="flex flex-col gap-2">
+                              {/* Normal schedules */}
+                              {dbTimelineSchedules.map((schedule) => {
+                                const span = getDbGridSpan(schedule.startTime, schedule.endTime);
+                                if (!span) return null;
+
+                                const isAllDay = !!schedule.isAllDay;
+                                const timeStr = isAllDay
+                                  ? "All Day"
+                                  : `${new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })}`;
+
+                                const isFixed = !!schedule.isFixedCost;
+                                const bgClass = isFixed 
+                                  ? "bg-amber-100 hover:bg-amber-200/70 border-amber-200 text-amber-950" 
+                                  : "bg-wheat hover:bg-wheat-dark/50 border-wheat-dark text-ink";
+
+                                return (
+                                  <div key={schedule.id} className="grid grid-cols-9 gap-2 items-center py-1 hover:bg-wheat/10 rounded-xl transition-colors">
+                                    <div className="col-span-2 pl-1 pr-3 min-w-0">
+                                      <h4 className="font-bold text-[11px] text-ink truncate" title={schedule.title}>{schedule.title}</h4>
+                                      <p className="text-[8px] text-ink-light font-bold mt-0.5">
+                                        {schedule.cost ? `💸 ${schedule.cost}฿` : "Schedule"}
+                                      </p>
+                                    </div>
+                                    
+                                    {/* Spanning Bar */}
+                                    <div 
+                                      style={{ 
+                                        gridColumnStart: span.startCol, 
+                                        gridColumnEnd: span.endCol 
+                                      }}
+                                      onClick={() => setEditingSchedule(schedule)}
+                                      className={`col-span-1 rounded-xl p-1.5 border shadow-soft cursor-pointer transition-all flex flex-col justify-center items-center text-center relative min-h-[38px] select-none
+                                        ${bgClass}
+                                        ${span.isContinuedStart ? 'rounded-l-none border-l-dashed border-l-2' : ''}
+                                        ${span.isContinuedEnd ? 'rounded-r-none border-r-dashed border-r-2' : ''}`}
+                                    >
+                                      <span className="font-extrabold text-[9px] sm:text-[10px] leading-tight truncate w-full px-1">{schedule.title}</span>
+                                      <span className="text-[7px] font-bold opacity-80 mt-0.5">{timeStr}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+
+                              {/* Routines */}
+                              {dbTimelineRoutines.map((routine) => {
+                                const activeDays = dbWeekDates.map((d, index) => ({
+                                  date: d,
+                                  index,
+                                  isActive: routineOccursOnDate(routine, d)
+                                })).filter(x => x.isActive);
+
+                                if (activeDays.length === 0) return null;
+
+                                return (
+                                  <div key={routine.id} className="grid grid-cols-9 gap-2 items-center py-1 hover:bg-wheat/10 rounded-xl transition-colors">
+                                    <div className="col-span-2 pl-1 pr-3 min-w-0">
+                                      <h4 className="font-bold text-[11px] text-ink truncate" title={routine.title}>🔄 {routine.title}</h4>
+                                      <p className="text-[8px] text-ink-light font-bold mt-0.5">Routine</p>
+                                    </div>
+
+                                    {activeDays.map((ad) => {
+                                      const timeStr = new Date(routine.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
+                                      return (
+                                        <div
+                                          key={ad.index}
+                                          style={{
+                                            gridColumnStart: ad.index + 3,
+                                            gridColumnEnd: ad.index + 4
+                                          }}
+                                          onClick={() => {
+                                            setSelectedDate(ad.date);
+                                            handleToggleRoutine(routine.id);
+                                          }}
+                                          className="rounded-xl p-1.5 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100/70 text-emerald-950 shadow-soft cursor-pointer transition-all flex flex-col justify-center items-center text-center min-h-[38px] select-none"
+                                        >
+                                          <span className="font-extrabold text-[9px] leading-tight truncate w-full px-1">{routine.title}</span>
+                                          <span className="text-[7px] font-bold opacity-80 mt-0.5">{timeStr}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
 
           {/* RIGHT: Selected Day Agenda & Details (Shown only on Desktop/Tablet screen sizes) */}
