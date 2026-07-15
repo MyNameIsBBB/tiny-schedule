@@ -13,13 +13,16 @@ import {
   importTasksAction,
   importSchedulesAction
 } from '../actions';
-import { Trash2, Calendar, Lock, ShieldCheck, Download, Upload, Eye } from 'lucide-react';
+import { Lock, ShieldCheck, Download, Upload, MonitorDown, CheckCircle2, Info } from 'lucide-react';
 import { addToast } from '@/lib/notifications';
+import { PWA_PROMPT_READY_EVENT } from '@/components/pwa/PWARegister';
 
 export default function SettingsPage() {
   const [theme, setTheme] = useState('light');
   const [isPending, startTransition] = useTransition();
   const [savedMessage, setSavedMessage] = useState("");
+  const [canInstallPWA, setCanInstallPWA] = useState(false);
+  const [isPWAInstalled, setIsPWAInstalled] = useState(false);
 
   // Focus Timer Settings
   const [defaultFocusMinutes, setDefaultFocusMinutes] = useState(25);
@@ -48,6 +51,26 @@ export default function SettingsPage() {
         setTotpEnabled(!!res.enabled);
       }
     });
+  }, []);
+
+  useEffect(() => {
+    const standalone = window.matchMedia('(display-mode: standalone)');
+    const updateInstallState = () => {
+      const installed = standalone.matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+      setIsPWAInstalled(installed);
+      setCanInstallPWA(!installed && Boolean(window.tinyScheduleInstallPrompt));
+    };
+
+    updateInstallState();
+    window.addEventListener(PWA_PROMPT_READY_EVENT, updateInstallState);
+    window.addEventListener('appinstalled', updateInstallState);
+    standalone.addEventListener('change', updateInstallState);
+
+    return () => {
+      window.removeEventListener(PWA_PROMPT_READY_EVENT, updateInstallState);
+      window.removeEventListener('appinstalled', updateInstallState);
+      standalone.removeEventListener('change', updateInstallState);
+    };
   }, []);
 
   const applyTheme = (t: string) => {
@@ -86,6 +109,23 @@ export default function SettingsPage() {
       startTransition(async () => {
         await logoutUser();
       });
+    }
+  };
+
+  const handleInstallPWA = async () => {
+    const installPrompt = window.tinyScheduleInstallPrompt;
+    if (!installPrompt) {
+      addToast("เปิดเมนู Chrome แล้วเลือก Install TinySchedule หรือ Install app");
+      return;
+    }
+
+    await installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    window.tinyScheduleInstallPrompt = undefined;
+    setCanInstallPWA(false);
+
+    if (outcome === 'accepted') {
+      addToast("✅ กำลังติดตั้ง TinySchedule เป็นแอป");
     }
   };
 
@@ -261,6 +301,36 @@ export default function SettingsPage() {
       )}
       
       <div className="flex flex-col gap-8">
+        {/* Install as a PWA */}
+        <div className="bg-paper-dark rounded-[2.5rem] p-8 shadow-soft border border-wheat-dark/20 transition-colors">
+          <h2 className="text-xl font-bold text-ink mb-4 flex items-center gap-2">
+            <MonitorDown size={21} className="text-highlight" /> Change to PWA
+          </h2>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 py-4">
+            <div>
+              <p className="font-bold text-ink">Install TinySchedule as an App</p>
+              <p className="text-sm text-ink-light mt-1 leading-relaxed">
+                ติดตั้ง TinySchedule ลงบนอุปกรณ์ แล้วเปิดใช้งานในหน้าต่างแอปแยกจากเบราว์เซอร์
+              </p>
+              {!canInstallPWA && !isPWAInstalled && (
+                <p className="text-xs text-ink-light mt-3 flex items-start gap-1.5">
+                  <Info size={14} className="shrink-0 mt-0.5" />
+                  ใช้ Chrome ผ่าน HTTPS หรือ localhost แล้วเลือกไอคอน Install ที่ด้านขวาของ address bar หากปุ่มยังไม่พร้อม
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleInstallPWA}
+              disabled={isPWAInstalled}
+              className="bg-highlight hover:bg-highlight-alt disabled:bg-wheat-dark disabled:text-ink-light text-paper px-6 py-3 rounded-full font-bold shadow-soft transition-transform hover:scale-105 active:scale-95 disabled:hover:scale-100 disabled:cursor-default flex items-center justify-center gap-2 shrink-0"
+            >
+              {isPWAInstalled ? <CheckCircle2 size={18} /> : <MonitorDown size={18} />}
+              {isPWAInstalled ? 'Installed as App' : canInstallPWA ? 'Install App' : 'How to Install'}
+            </button>
+          </div>
+        </div>
+
         {/* Appearance */}
         <div className="bg-paper-dark rounded-[2.5rem] p-8 shadow-soft border border-wheat-dark/20 transition-colors">
           <h2 className="text-xl font-bold text-ink mb-4">Appearance</h2>
