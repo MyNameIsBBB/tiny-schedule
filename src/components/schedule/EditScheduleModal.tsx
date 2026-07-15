@@ -64,12 +64,12 @@ export default function EditScheduleModal({
   // Helper date/time formatters
   const formatDate = (dateInput: Date | string) => {
     const d = new Date(dateInput);
-    return d.toLocaleDateString('en-CA'); // YYYY-MM-DD
+    return d.toISOString().split('T')[0]; // YYYY-MM-DD in UTC
   };
 
   const formatTime = (dateInput: Date | string) => {
     const d = new Date(dateInput);
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    return d.toISOString().split('T')[1].substring(0, 5); // HH:MM in UTC
   };
 
   async function handleSubmit(formData: FormData) {

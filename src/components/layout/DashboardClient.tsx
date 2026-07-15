@@ -152,15 +152,15 @@ export default function DashboardClient({
 
   // Projection logic for normal schedules on a date
   const getSchedulesForDate = (date: Date) => {
-    const cellDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const cellDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
     
     return initialSchedules
       .filter((schedule) => {
         if (schedule.isRoutine) return false;
         const sStart = new Date(schedule.startTime);
         const sEnd = new Date(schedule.endTime);
-        const startDate = new Date(sStart.getFullYear(), sStart.getMonth(), sStart.getDate());
-        const endDate = new Date(sEnd.getFullYear(), sEnd.getMonth(), sEnd.getDate());
+        const startDate = new Date(Date.UTC(sStart.getUTCFullYear(), sStart.getUTCMonth(), sStart.getUTCDate()));
+        const endDate = new Date(Date.UTC(sEnd.getUTCFullYear(), sEnd.getUTCMonth(), sEnd.getUTCDate()));
         return cellDate >= startDate && cellDate <= endDate;
       })
       .sort((a, b) => {
@@ -204,10 +204,10 @@ export default function DashboardClient({
         return false;
       })
       .sort((a, b) => {
-        const aHours = new Date(a.startTime).getHours();
-        const bHours = new Date(b.startTime).getHours();
+        const aHours = new Date(a.startTime).getUTCHours();
+        const bHours = new Date(b.startTime).getUTCHours();
         if (aHours !== bHours) return aHours - bHours;
-        return new Date(a.startTime).getMinutes() - new Date(b.startTime).getMinutes();
+        return new Date(a.startTime).getUTCMinutes() - new Date(b.startTime).getUTCMinutes();
       });
   };
 
@@ -276,7 +276,7 @@ export default function DashboardClient({
             {selectedRoutines.length > 0 ? (
               selectedRoutines.map((routine) => {
                 const completed = !!completedRoutines[routine.id];
-                const timeStr = new Date(routine.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                const timeStr = new Date(routine.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
                 const displayTitle = routine.cost 
                   ? `${routine.title} (💸 ${routine.cost}฿)` 
                   : routine.title;
@@ -322,10 +322,10 @@ export default function DashboardClient({
                 const isAllDay = !!schedule.isAllDay;
                 const startTimeStr = isAllDay 
                   ? "All Day" 
-                  : new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                  : new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
                 const endTimeStr = isAllDay 
                   ? "" 
-                  : new Date(schedule.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                  : new Date(schedule.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
                 const durationStr = isAllDay 
                   ? "Full Day" 
                   : calculateDuration(schedule.startTime, schedule.endTime);

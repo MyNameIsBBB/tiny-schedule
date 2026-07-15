@@ -53,11 +53,11 @@ export default function ScheduleClient({ initialSchedules }: { initialSchedules:
 
     const getDatesInRange = (start: Date, end: Date) => {
       const dates: string[] = [];
-      const current = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-      const last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+      const current = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
+      const last = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
       while (current <= last) {
-        dates.push(current.toLocaleDateString('en-CA'));
-        current.setDate(current.getDate() + 1);
+        dates.push(current.toISOString().split('T')[0]);
+        current.setUTCDate(current.getUTCDate() + 1);
       }
       return dates;
     };
@@ -115,9 +115,9 @@ export default function ScheduleClient({ initialSchedules }: { initialSchedules:
         }
 
         const setTimeToDate = (targetDate: Date, timeDate: Date | string) => {
-          const d = new Date(targetDate);
+          const d = new Date(Date.UTC(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()));
           const t = new Date(timeDate);
-          d.setHours(t.getHours(), t.getMinutes(), t.getSeconds(), t.getMilliseconds());
+          d.setUTCHours(t.getUTCHours(), t.getUTCMinutes(), t.getUTCSeconds(), t.getUTCMilliseconds());
           return d;
         };
 
@@ -236,7 +236,7 @@ export default function ScheduleClient({ initialSchedules }: { initialSchedules:
                         const isAllDay = !!schedule.isAllDay;
                         const startTimeStr = isAllDay 
                           ? "All Day" 
-                          : new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                          : new Date(schedule.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
                         const durationStr = isAllDay 
                           ? "Full Day" 
                           : calculateDuration(schedule.startTime, schedule.endTime);

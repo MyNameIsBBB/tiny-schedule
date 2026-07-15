@@ -318,8 +318,8 @@ export async function createSchedule(formData: FormData) {
     const startTimeStr = isAllDay ? "00:00" : (formData.get("startTime") as string || "00:00");
     const endTimeStr = isAllDay ? "23:59" : (formData.get("endTime") as string || "23:59");
 
-    const startTime = new Date(`${startDateStr}T${startTimeStr}:00`);
-    const endTime = new Date(`${endDateStr}T${endTimeStr}:00`);
+    const startTime = new Date(`${startDateStr}T${startTimeStr}:00.000Z`);
+    const endTime = new Date(`${endDateStr}T${endTimeStr}:00.000Z`);
 
     const costStr = formData.get("cost") as string;
     const cost = costStr ? parseFloat(costStr) : null;
@@ -367,8 +367,8 @@ export async function updateSchedule(scheduleId: string, formData: FormData) {
     const startTimeStr = isAllDay ? "00:00" : (formData.get("startTime") as string || "00:00");
     const endTimeStr = isAllDay ? "23:59" : (formData.get("endTime") as string || "23:59");
 
-    const startTime = new Date(`${startDateStr}T${startTimeStr}:00`);
-    const endTime = new Date(`${endDateStr}T${endTimeStr}:00`);
+    const startTime = new Date(`${startDateStr}T${startTimeStr}:00.000Z`);
+    const endTime = new Date(`${endDateStr}T${endTimeStr}:00.000Z`);
 
     const costStr = formData.get("cost") as string;
     const cost = costStr ? parseFloat(costStr) : null;
